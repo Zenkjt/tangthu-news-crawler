@@ -2,7 +2,11 @@ project: tangthu-news-crawler
 timezone: Asia/Ho_Chi_Minh
 crawler:
   request_timeout: 20
-  concurrency: 8
+  concurrency: 1
+  download_delay: 2
+  autothrottle_start_delay: 2
+  autothrottle_max_delay: 10
+  autothrottle_target_concurrency: 0.5
   retry_times: 2
 storage:
   article_pool: data/article_pool

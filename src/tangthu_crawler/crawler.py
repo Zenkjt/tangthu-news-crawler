@@ -12,9 +12,52 @@ from scrapy.crawler import CrawlerProcess
 from .models import ArticleRef
 
 
+DEFAULT_BROWSER_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/131.0.0.0 Safari/537.36"
+)
+
+DEFAULT_REQUEST_HEADERS = {
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+    "Accept-Language": "vi,en-US;q=0.8,en;q=0.6",
+    "Accept-Encoding": "gzip, deflate",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+}
+
+
 def article_id(url: str) -> str:
     """Return the stable ID used for all representations of an article URL."""
     return hashlib.sha256(url.encode("utf-8")).hexdigest()[:32]
+
+
+def build_crawler_settings(settings: dict, source: dict) -> dict:
+    crawler_cfg = settings.get("crawler", {})
+    source_http = source.get("http", {})
+
+    headers = dict(DEFAULT_REQUEST_HEADERS)
+    headers.update(source_http.get("headers", {}))
+
+    return {
+        "USER_AGENT": crawler_cfg.get("user_agent", DEFAULT_BROWSER_USER_AGENT),
+        "DEFAULT_REQUEST_HEADERS": headers,
+        "DOWNLOAD_TIMEOUT": crawler_cfg.get("request_timeout", 20),
+        "CONCURRENT_REQUESTS": crawler_cfg.get("concurrency", 1),
+        "CONCURRENT_REQUESTS_PER_DOMAIN": 1,
+        "DOWNLOAD_DELAY": crawler_cfg.get("download_delay", 2),
+        "RANDOMIZE_DOWNLOAD_DELAY": True,
+        "AUTOTHROTTLE_ENABLED": True,
+        "AUTOTHROTTLE_START_DELAY": crawler_cfg.get("autothrottle_start_delay", 2),
+        "AUTOTHROTTLE_MAX_DELAY": crawler_cfg.get("autothrottle_max_delay", 10),
+        "AUTOTHROTTLE_TARGET_CONCURRENCY": crawler_cfg.get("autothrottle_target_concurrency", 0.5),
+        "RETRY_TIMES": crawler_cfg.get("retry_times", 2),
+        "RETRY_HTTP_CODES": [408, 429, 500, 502, 503, 504, 522, 524],
+        "ROBOTSTXT_OBEY": True,
+        "LOG_LEVEL": "INFO",
+        "COOKIES_ENABLED": False,
+        "TELNETCONSOLE_ENABLED": False,
+    }
 
 
 class ArticleSpider(scrapy.Spider):
@@ -112,21 +155,7 @@ def crawl(
     if not refs:
         return
 
-    crawler_cfg = settings.get("crawler", {})
-    process = CrawlerProcess(
-        settings={
-            "USER_AGENT": crawler_cfg.get(
-                "user_agent", "TangThuNewsCrawler/0.1"
-            ),
-            "DOWNLOAD_TIMEOUT": crawler_cfg.get("request_timeout", 20),
-            "CONCURRENT_REQUESTS": crawler_cfg.get("concurrency", 8),
-            "RETRY_TIMES": crawler_cfg.get("retry_times", 2),
-            "ROBOTSTXT_OBEY": True,
-            "LOG_LEVEL": "INFO",
-            "COOKIES_ENABLED": False,
-            "TELNETCONSOLE_ENABLED": False,
-        }
-    )
+    process = CrawlerProcess(settings=build_crawler_settings(settings, source))
     process.crawl(
         ArticleSpider,
         refs=refs,
