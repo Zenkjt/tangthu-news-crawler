@@ -1,0 +1,16 @@
+name: Tang Thu News Crawler
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 * * *"
+jobs:
+  crawler:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: python -m tangthu_crawler
+      - run: pytest
