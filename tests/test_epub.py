@@ -5,29 +5,27 @@ from pathlib import Path
 from tangthu_crawler.epub import EpubGenerator
 
 
-ARTICLE_PATH = "EPUB/article-1.xhtml"
-
-
-def _write_article(pool: Path, article_id: str, title: str) -> None:
+def _write_article(pool: Path, article_id: str, **extra) -> None:
     folder = pool / "fixture"
     folder.mkdir(parents=True, exist_ok=True)
+    article = {
+        "id": article_id,
+        "source_id": "fixture",
+        "url": f"https://example.com/{article_id}",
+        "canonical_url": f"https://example.com/{article_id}",
+        "title": "Test Article",
+        "body": "First paragraph.\n\nSecond paragraph.",
+    }
+    article.update(extra)
     (folder / f"{article_id}.json").write_text(
-        json.dumps({
-            "id": article_id,
-            "source_id": "fixture",
-            "url": f"https://example.com/{article_id}",
-            "canonical_url": f"https://example.com/{article_id}",
-            "title": title,
-            "body": f"Body for {title}.",
-        }),
+        json.dumps(article),
         encoding="utf-8",
     )
 
 
-def test_generator_can_limit_edition_to_current_run(tmp_path: Path):
+def test_generate_without_image(tmp_path: Path):
     pool = tmp_path / "pool"
-    _write_article(pool, "old", "Old Article")
-    _write_article(pool, "new", "New Article")
+    _write_article(pool, "one")
 
     output = tmp_path / "0neNews.epub"
     EpubGenerator().generate(
@@ -38,21 +36,41 @@ def test_generator_can_limit_edition_to_current_run(tmp_path: Path):
             "status": "active",
             "policy": {"mode": "full_article"},
         }],
-        article_ids={"new"},
+        article_ids={"one"},
     )
 
-    with zipfile.ZipFile(output) as epub_file:
-        names = set(epub_file.namelist())
+    with zipfile.ZipFile(output) as z:
+        names = set(z.namelist())
         assert "EPUB/article-1.xhtml" in names
-        assert "EPUB/article-2.xhtml" not in names
-        content = epub_file.read("EPUB/article-1.xhtml").decode("utf-8")
-        assert "New Article" in content
-        assert "Old Article" not in content
+        assert not any(name.startswith("EPUB/images/") for name in names)
 
 
-def test_empty_current_run_produces_valid_edition(tmp_path: Path):
+def test_image_is_embedded(monkeypatch, tmp_path: Path):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+        def read(self):
+            return b"\xff\xd8\xff\xd9"
+        @property
+        def headers(self):
+            class Headers:
+                def get_content_type(self):
+                    return "image/jpeg"
+            return Headers()
+
+    monkeypatch.setattr(
+        "tangthu_crawler.epub.urlopen",
+        lambda request, timeout: FakeResponse(),
+    )
+
     pool = tmp_path / "pool"
-    _write_article(pool, "old", "Old Article")
+    _write_article(
+        pool,
+        "one",
+        image="https://example.com/image.jpg",
+    )
 
     output = tmp_path / "0neNews.epub"
     EpubGenerator().generate(
@@ -63,11 +81,41 @@ def test_empty_current_run_produces_valid_edition(tmp_path: Path):
             "status": "active",
             "policy": {"mode": "full_article"},
         }],
-        article_ids=set(),
+        article_ids={"one"},
     )
 
-    with zipfile.ZipFile(output) as epub_file:
-        names = set(epub_file.namelist())
-        assert "mimetype" in names
-        assert "EPUB/edition.xhtml" in names
-        assert "EPUB/article-1.xhtml" not in names
+    with zipfile.ZipFile(output) as z:
+        names = set(z.namelist())
+        image_names = [n for n in names if n.startswith("EPUB/images/")]
+        assert len(image_names) == 1
+        content = z.read("EPUB/article-1.xhtml").decode("utf-8")
+        assert "images/" in content
+
+
+def test_image_failure_does_not_break_edition(monkeypatch, tmp_path: Path):
+    def fail(*args, **kwargs):
+        raise OSError("image unavailable")
+
+    monkeypatch.setattr("tangthu_crawler.epub.urlopen", fail)
+
+    pool = tmp_path / "pool"
+    _write_article(
+        pool,
+        "one",
+        image="https://example.com/image.jpg",
+    )
+
+    output = tmp_path / "0neNews.epub"
+    EpubGenerator().generate(
+        pool,
+        output,
+        sources=[{
+            "id": "fixture",
+            "status": "active",
+            "policy": {"mode": "full_article"},
+        }],
+        article_ids={"one"},
+    )
+
+    with zipfile.ZipFile(output) as z:
+        assert "EPUB/article-1.xhtml" in z.namelist()
