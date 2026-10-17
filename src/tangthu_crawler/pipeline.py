@@ -1,4 +1,5 @@
-from .config import load_settings
+from .config import ROOT, load_settings
+from .crawler import crawl
 from .discovery import SourceDiscovery
 from .registry import SourceRegistry
 
@@ -13,8 +14,11 @@ def run() -> None:
 
         refs = SourceDiscovery(source, settings).discover()
         print(f"{source['id']}: discovered {len(refs)} article URLs")
-        for ref in refs[:10]:
-            print(f"  {ref.url}")
+
+        output_dir = ROOT / settings.get("storage", {}).get(
+            "article_pool", "data/article_pool"
+        )
+        crawl(refs, source, settings, output_dir)
 
 
 if __name__ == "__main__":
