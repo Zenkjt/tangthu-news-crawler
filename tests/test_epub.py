@@ -8,65 +8,27 @@ from tangthu_crawler.epub import EpubGenerator
 ARTICLE_PATH = "EPUB/article-1.xhtml"
 
 
-def test_generate_daily_epub(tmp_path: Path):
-    pool = tmp_path / "pool"
-    fixture = pool / "fixture"
-    fixture.mkdir(parents=True)
-
-    article = {
-        "id": "abc",
-        "source_id": "fixture",
-        "url": "https://example.com/article",
-        "canonical_url": "https://example.com/article",
-        "title": "Test Article",
-        "author": "Test Author",
-        "published_at": "2026-10-17T01:00:00+00:00",
-        "body": "First paragraph.\n\nSecond paragraph.",
-    }
-    (fixture / "abc.json").write_text(
-        json.dumps(article, ensure_ascii=False), encoding="utf-8"
-    )
-
-    output = tmp_path / "0neNews.epub"
-    EpubGenerator().generate(
-        pool,
-        output,
-        sources=[{
-            "id": "fixture",
-            "name": "Fixture",
-            "status": "active",
-            "policy": {"mode": "full_article"},
-        }],
-    )
-
-    assert output.exists()
-    assert output.stat().st_size > 0
-
-    with zipfile.ZipFile(output) as epub_file:
-        names = set(epub_file.namelist())
-        assert "mimetype" in names
-        assert ARTICLE_PATH in names
-        content = epub_file.read(ARTICLE_PATH).decode("utf-8")
-        assert "Test Article" in content
-        assert "First paragraph." in content
-        assert "Original article" in content
-
-
-def test_metadata_only_policy(tmp_path: Path):
-    pool = tmp_path / "pool"
-    fixture = pool / "fixture"
-    fixture.mkdir(parents=True)
-    (fixture / "abc.json").write_text(
+def _write_article(pool: Path, article_id: str, title: str) -> None:
+    folder = pool / "fixture"
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{article_id}.json").write_text(
         json.dumps({
-            "id": "abc",
+            "id": article_id,
             "source_id": "fixture",
-            "url": "https://example.com/article",
-            "title": "Metadata Only",
-            "body": "This must not be reproduced.",
+            "url": f"https://example.com/{article_id}",
+            "canonical_url": f"https://example.com/{article_id}",
+            "title": title,
+            "body": f"Body for {title}.",
         }),
         encoding="utf-8",
     )
 
+
+def test_generator_can_limit_edition_to_current_run(tmp_path: Path):
+    pool = tmp_path / "pool"
+    _write_article(pool, "old", "Old Article")
+    _write_article(pool, "new", "New Article")
+
     output = tmp_path / "0neNews.epub"
     EpubGenerator().generate(
         pool,
@@ -74,11 +36,38 @@ def test_metadata_only_policy(tmp_path: Path):
         sources=[{
             "id": "fixture",
             "status": "active",
-            "policy": {"mode": "metadata_only"},
+            "policy": {"mode": "full_article"},
         }],
+        article_ids={"new"},
     )
 
     with zipfile.ZipFile(output) as epub_file:
-        content = epub_file.read(ARTICLE_PATH).decode("utf-8")
-        assert "This must not be reproduced." not in content
-        assert "Metadata Only" in content
+        names = set(epub_file.namelist())
+        assert "EPUB/article-1.xhtml" in names
+        assert "EPUB/article-2.xhtml" not in names
+        content = epub_file.read("EPUB/article-1.xhtml").decode("utf-8")
+        assert "New Article" in content
+        assert "Old Article" not in content
+
+
+def test_empty_current_run_produces_valid_edition(tmp_path: Path):
+    pool = tmp_path / "pool"
+    _write_article(pool, "old", "Old Article")
+
+    output = tmp_path / "0neNews.epub"
+    EpubGenerator().generate(
+        pool,
+        output,
+        sources=[{
+            "id": "fixture",
+            "status": "active",
+            "policy": {"mode": "full_article"},
+        }],
+        article_ids=set(),
+    )
+
+    with zipfile.ZipFile(output) as epub_file:
+        names = set(epub_file.namelist())
+        assert "mimetype" in names
+        assert "EPUB/edition.xhtml" in names
+        assert "EPUB/article-1.xhtml" not in names

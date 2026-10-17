@@ -19,15 +19,23 @@ def run() -> None:
     output_dir = ROOT / settings.get("storage", {}).get(
         "article_pool", "data/article_pool"
     )
+    pool = ArticlePool(output_dir)
+    extractor = ArticleExtractor()
+    edition_article_ids: set[str] = set()
 
     for source in active_sources:
-        refs = SourceDiscovery(source, settings).discover()
-        print(f"{source['id']}: discovered {len(refs)} article URLs")
+        try:
+            refs = SourceDiscovery(source, settings).discover()
+            print(f"{source['id']}: discovered {len(refs)} article URLs")
+        except Exception as exc:
+            print(f"{source['id']}: discovery failed: {exc}")
+            continue
 
-        crawl(refs, source, settings, output_dir)
-
-        extractor = ArticleExtractor()
-        pool = ArticlePool(output_dir)
+        try:
+            crawl(refs, source, settings, output_dir)
+        except Exception as exc:
+            print(f"{source['id']}: crawl failed: {exc}")
+            continue
 
         for ref in refs:
             item_id = article_id(ref.url)
@@ -39,23 +47,26 @@ def run() -> None:
 
             try:
                 article = extractor.extract(html_path, ref.url)
+                article["id"] = item_id
+                article["source_id"] = ref.source_id
+                pool.write_article(article)
+                edition_article_ids.add(item_id)
             except Exception as exc:
                 print(f"{source['id']}: extraction failed {ref.url}: {exc}")
-                continue
-
-            article["id"] = item_id
-            article["source_id"] = ref.source_id
-            pool.write_article(article)
 
     epub_path = ROOT / settings.get("storage", {}).get(
-        "epub", "data/editions/0neNews.epub"
-    )
-    EpubGenerator().generate(
+        "editions", "data/editions"
+    ) / "0neNews.epub"
+
+    EpubGenerator(
+        timezone=settings.get("timezone", "Asia/Ho_Chi_Minh")
+    ).generate(
         article_pool=output_dir,
         output_path=epub_path,
         sources=active_sources,
         title=settings.get("edition", {}).get("title", "YOUR NEWS"),
         edition_time=settings.get("edition", {}).get("time", "07:00"),
+        article_ids=edition_article_ids,
     )
     print(f"EPUB generated: {epub_path}")
 

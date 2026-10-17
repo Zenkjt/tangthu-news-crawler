@@ -10,7 +10,7 @@ from ebooklib import epub
 
 
 class EpubGenerator:
-    """Build a daily EPUB edition from normalized Article Pool JSON files."""
+    """Build an EPUB edition from selected normalized Article Pool JSON files."""
 
     def __init__(self, timezone: str = "Asia/Ho_Chi_Minh"):
         self.timezone = ZoneInfo(timezone)
@@ -22,6 +22,7 @@ class EpubGenerator:
         sources: list[dict],
         title: str = "YOUR NEWS",
         edition_time: str = "07:00",
+        article_ids: set[str] | None = None,
     ) -> Path:
         pool = Path(article_pool)
         output = Path(output_path)
@@ -31,16 +32,27 @@ class EpubGenerator:
         for path in sorted(pool.glob("*/*.json")):
             if path.name.endswith(".meta.json"):
                 continue
+
             article = json.loads(path.read_text(encoding="utf-8"))
+            if article_ids is not None and article.get("id") not in article_ids:
+                continue
+
             source = source_map.get(article.get("source_id"), {})
             if source.get("status", "active") != "active":
                 continue
-            articles.append(self._apply_policy(article, source.get("policy", {})))
 
-        articles.sort(key=lambda a: a.get("published_at") or "", reverse=True)
+            articles.append(
+                self._apply_policy(article, source.get("policy", {}))
+            )
+
+        articles.sort(
+            key=lambda a: a.get("published_at") or "",
+            reverse=True,
+        )
 
         now = datetime.now(self.timezone)
         date_label = now.strftime("%-d %B %Y")
+
         book = epub.EpubBook()
         book.set_identifier(f"tangthu-news-{now:%Y%m%d}")
         book.set_title(f"{title} at {edition_time} — {date_label}")
@@ -48,6 +60,7 @@ class EpubGenerator:
         book.add_author("Tàng Thư")
 
         chapters = []
+
         intro = epub.EpubHtml(
             title="Edition",
             file_name="edition.xhtml",
@@ -61,7 +74,7 @@ class EpubGenerator:
 
         for index, article in enumerate(articles, start=1):
             chapter = epub.EpubHtml(
-                title=article["title"] or f"Article {index}",
+                title=article.get("title") or f"Article {index}",
                 file_name=f"article-{index}.xhtml",
                 lang="vi",
             )
@@ -92,6 +105,7 @@ class EpubGenerator:
             result["body"] = body
         else:
             result["body"] = body[:800].strip()
+
         return result
 
     @staticmethod
@@ -109,19 +123,23 @@ class EpubGenerator:
         author = html.escape(article.get("author") or "")
         source = html.escape(article.get("source_id") or "")
         published = html.escape(article.get("published_at") or "")
-        url = html.escape(article.get("canonical_url") or article.get("url") or "")
-        body = html.escape(article.get("body") or "")
+        url = html.escape(
+            article.get("canonical_url") or article.get("url") or ""
+        )
+        body = article.get("body") or ""
 
         paragraphs = "\n".join(
             f"<p>{html.escape(line.strip())}</p>"
             for line in body.splitlines()
             if line.strip()
         )
-        if not paragraphs and body:
-            paragraphs = f"<p>{body}</p>"
 
         meta = " · ".join(x for x in (source, published, author) if x)
-        link = f'<p><a href="{url}">Original article</a></p>' if url else ""
+        link = (
+            f'<p><a href="{url}">Original article</a></p>'
+            if url
+            else ""
+        )
 
         return f"""<html><head><title>{title}</title></head>
 <body>
