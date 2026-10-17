@@ -2,11 +2,25 @@ id: vnexpress
 name: VnExpress
 url: https://vnexpress.net
 status: active
+
 discovery:
   - rss
   - sitemap
   - html
+
+rss:
+  index_url: https://vnexpress.net/rss
+
+sitemap:
+  paths:
+    - /sitemap.xml
+
+html:
+  pages:
+    - /
+
 extractor:
   engine: newspaper4k
+
 policy:
   mode: excerpt
