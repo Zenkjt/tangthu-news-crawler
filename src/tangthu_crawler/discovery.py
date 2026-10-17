@@ -11,6 +11,12 @@ from .models import ArticleRef
 
 
 class SourceDiscovery:
+    """Discover article URLs using source-aware strategies.
+
+    Vietnamese news sites commonly expose articles through category pages with
+    numbered pagination. RSS is treated as optional, not as the primary source.
+    """
+
     def __init__(self, source: dict, settings: dict):
         self.source = source
         crawler = settings.get("crawler", {})
@@ -24,12 +30,18 @@ class SourceDiscovery:
         urls: list[str] = []
         methods = self.source.get("discovery", [])
 
-        if "rss" in methods:
-            urls.extend(self._rss())
-        if "sitemap" in methods:
-            urls.extend(self._sitemap())
-        if "html" in methods and not urls:
-            urls.extend(self._html())
+        # Order matters: source-specific HTML/category discovery is primary for
+        # Vietnamese news; sitemap is secondary and RSS is only a fallback.
+        for method in methods:
+            try:
+                if method == "html":
+                    urls.extend(self._html())
+                elif method == "sitemap":
+                    urls.extend(self._sitemap())
+                elif method == "rss":
+                    urls.extend(self._rss())
+            except (requests.RequestException, ElementTree.ParseError) as exc:
+                print(f"{self.source.get('id', 'source')}: {method} discovery failed: {exc}")
 
         return self._normalize(urls)
 
@@ -101,6 +113,71 @@ class SourceDiscovery:
 
     def _html(self) -> list[str]:
         cfg = self.source.get("html", {})
+        strategy = cfg.get("strategy", "links")
+
+        if strategy == "category_pagination":
+            return self._html_category_pagination(cfg)
+
+        if strategy == "selector":
+            return self._html_selector(cfg)
+
+        return self._html_links(cfg)
+
+    def _html_category_pagination(self, cfg: dict) -> list[str]:
+        """Vietnamese-news pattern: /<category>-p1, /<category>-p2, ..."""
+        categories = list(cfg.get("categories", []))
+        pages = max(1, int(cfg.get("pages", 1)))
+        template = cfg.get("page_url_template", "/{category}-p{page}")
+        selector = cfg.get("article_link_selector", ".title-news a")
+        max_urls = int(cfg.get("max_urls", 0))
+
+        urls: list[str] = []
+        for category in categories:
+            for page in range(1, pages + 1):
+                page_url = urljoin(
+                    self.source["url"],
+                    template.format(category=category, page=page),
+                )
+                try:
+                    soup = BeautifulSoup(self._get(page_url), "html.parser")
+                except requests.RequestException:
+                    continue
+
+                links = [
+                    urljoin(page_url, anchor["href"])
+                    for anchor in soup.select(selector)
+                    if anchor.get("href")
+                ]
+
+                # Empty numbered pages mark the end of the useful range.
+                if not links:
+                    break
+
+                urls.extend(links)
+                if max_urls and len(urls) >= max_urls:
+                    return urls[:max_urls]
+
+        return urls
+
+    def _html_selector(self, cfg: dict) -> list[str]:
+        pages = cfg.get("pages", [self.source["url"]])
+        selector = cfg.get("article_link_selector", "a[href]")
+        urls: list[str] = []
+
+        for page in pages:
+            page_url = urljoin(self.source["url"], page)
+            try:
+                soup = BeautifulSoup(self._get(page_url), "html.parser")
+            except requests.RequestException:
+                continue
+            urls.extend(
+                urljoin(page_url, anchor["href"])
+                for anchor in soup.select(selector)
+                if anchor.get("href")
+            )
+        return urls
+
+    def _html_links(self, cfg: dict) -> list[str]:
         pages = cfg.get("pages", [self.source["url"]])
         urls: list[str] = []
 
@@ -111,20 +188,20 @@ class SourceDiscovery:
             except requests.RequestException:
                 continue
             urls.extend(
-                urljoin(page_url, a["href"])
-                for a in soup.find_all("a", href=True)
+                urljoin(page_url, anchor["href"])
+                for anchor in soup.find_all("a", href=True)
             )
         return urls
 
     def _normalize(self, urls: list[str]) -> list[ArticleRef]:
-        base_host = urlparse(self.source["url"]).netloc
+        base_host = urlparse(self.source["url"]).netloc.lower()
         seen: set[str] = set()
         now = datetime.now(timezone.utc)
         result: list[ArticleRef] = []
 
         for raw in urls:
             url = self._canonicalize(raw)
-            if not url or urlparse(url).netloc != base_host or url in seen:
+            if not url or urlparse(url).netloc.lower() != base_host or url in seen:
                 continue
             seen.add(url)
             result.append(ArticleRef(self.source["id"], url, now))
