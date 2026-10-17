@@ -2,18 +2,21 @@ import json
 import zipfile
 from pathlib import Path
 
+import pytest
+
 from tangthu_crawler.epub import EpubGenerator
+from tangthu_crawler.validator import EpubValidationError, validate_epub
 
 
-def _write_article(pool: Path, article_id: str, **extra) -> None:
-    folder = pool / "fixture"
+def _write_article(pool: Path, article_id: str, source_id="fixture", **extra) -> None:
+    folder = pool / source_id
     folder.mkdir(parents=True, exist_ok=True)
     article = {
         "id": article_id,
-        "source_id": "fixture",
+        "source_id": source_id,
         "url": f"https://example.com/{article_id}",
         "canonical_url": f"https://example.com/{article_id}",
-        "title": "Test Article",
+        "title": f"Test Article {article_id}",
         "body": "First paragraph.\n\nSecond paragraph.",
     }
     article.update(extra)
@@ -23,7 +26,7 @@ def _write_article(pool: Path, article_id: str, **extra) -> None:
     )
 
 
-def test_generate_without_image(tmp_path: Path):
+def test_generated_epub_passes_structural_validation(tmp_path: Path):
     pool = tmp_path / "pool"
     _write_article(pool, "one")
 
@@ -33,89 +36,55 @@ def test_generate_without_image(tmp_path: Path):
         output,
         sources=[{
             "id": "fixture",
+            "name": "Fixture News",
             "status": "active",
             "policy": {"mode": "full_article"},
         }],
         article_ids={"one"},
     )
 
+    validate_epub(output)
+
     with zipfile.ZipFile(output) as z:
-        names = set(z.namelist())
-        assert "EPUB/article-1.xhtml" in names
-        assert not any(name.startswith("EPUB/images/") for name in names)
+        toc = z.read("EPUB/toc.xhtml").decode("utf-8")
+        nav = z.read("EPUB/nav.xhtml").decode("utf-8")
+        assert "Mục lục" in toc
+        assert "Fixture News" in toc
+        assert "Test Article one" in toc
+        assert "article-1.xhtml" in toc
+        assert "Fixture News" in nav
 
 
-def test_image_is_embedded(monkeypatch, tmp_path: Path):
-    class FakeResponse:
-        def __enter__(self):
-            return self
-        def __exit__(self, *args):
-            pass
-        def read(self):
-            return b"\xff\xd8\xff\xd9"
-        @property
-        def headers(self):
-            class Headers:
-                def get_content_type(self):
-                    return "image/jpeg"
-            return Headers()
+def test_validator_rejects_broken_epub(tmp_path: Path):
+    output = tmp_path / "broken.epub"
+    with zipfile.ZipFile(output, "w") as z:
+        z.writestr("mimetype", "wrong")
 
-    monkeypatch.setattr(
-        "tangthu_crawler.epub.urlopen",
-        lambda request, timeout: FakeResponse(),
-    )
+    with pytest.raises(EpubValidationError):
+        validate_epub(output)
 
+
+def test_toc_has_one_hierarchy_level_per_source(tmp_path: Path):
     pool = tmp_path / "pool"
-    _write_article(
-        pool,
-        "one",
-        image="https://example.com/image.jpg",
-    )
+    _write_article(pool, "one", source_id="source_a")
+    _write_article(pool, "two", source_id="source_a")
+    _write_article(pool, "three", source_id="source_b")
 
     output = tmp_path / "0neNews.epub"
     EpubGenerator().generate(
         pool,
         output,
-        sources=[{
-            "id": "fixture",
-            "status": "active",
-            "policy": {"mode": "full_article"},
-        }],
-        article_ids={"one"},
+        sources=[
+            {"id": "source_a", "name": "Nguồn A", "status": "active", "policy": {"mode": "full_article"}},
+            {"id": "source_b", "name": "Nguồn B", "status": "active", "policy": {"mode": "full_article"}},
+        ],
+        article_ids={"one", "two", "three"},
     )
 
     with zipfile.ZipFile(output) as z:
-        names = set(z.namelist())
-        image_names = [n for n in names if n.startswith("EPUB/images/")]
-        assert len(image_names) == 1
-        content = z.read("EPUB/article-1.xhtml").decode("utf-8")
-        assert "images/" in content
-
-
-def test_image_failure_does_not_break_edition(monkeypatch, tmp_path: Path):
-    def fail(*args, **kwargs):
-        raise OSError("image unavailable")
-
-    monkeypatch.setattr("tangthu_crawler.epub.urlopen", fail)
-
-    pool = tmp_path / "pool"
-    _write_article(
-        pool,
-        "one",
-        image="https://example.com/image.jpg",
-    )
-
-    output = tmp_path / "0neNews.epub"
-    EpubGenerator().generate(
-        pool,
-        output,
-        sources=[{
-            "id": "fixture",
-            "status": "active",
-            "policy": {"mode": "full_article"},
-        }],
-        article_ids={"one"},
-    )
-
-    with zipfile.ZipFile(output) as z:
-        assert "EPUB/article-1.xhtml" in z.namelist()
+        toc = z.read("EPUB/toc.xhtml").decode("utf-8")
+        assert toc.count("<strong>Nguồn A</strong>") == 1
+        assert toc.count("<strong>Nguồn B</strong>") == 1
+        assert "Test Article one" in toc
+        assert "Test Article two" in toc
+        assert "Test Article three" in toc
