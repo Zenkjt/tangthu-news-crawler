@@ -95,9 +95,15 @@ class SourceDiscovery:
 
     def _is_article_url(self,url):
         path=urlparse(url).path.lower()
+        configured_prefixes=self.source.get("html",{}).get("excluded_path_prefixes",[])
+        if self.source.get("id") == "vnexpress":
+            configured_prefixes = [
+                "/tac-gia/", "/author/", "/chu-de/", "/video/",
+                *configured_prefixes,
+            ]
         excluded_prefixes=tuple(
             p.lower().rstrip("/") + "/"
-            for p in self.source.get("html",{}).get("excluded_path_prefixes",[])
+            for p in configured_prefixes
         )
         if any(path.startswith(prefix) for prefix in excluded_prefixes):
             return False
