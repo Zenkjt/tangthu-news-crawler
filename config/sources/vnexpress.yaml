@@ -7,7 +7,6 @@ http:
   headers:
     Referer: https://vnexpress.net/
 
-# The configured URL is the crawl boundary. No RSS, sitemap or pagination.
 discovery:
   - html
 
@@ -21,7 +20,7 @@ html:
     - "article a"
 
 extractor:
-  engine: newspaper4k
+  engine: vnexpress
 
 policy:
   mode: excerpt
