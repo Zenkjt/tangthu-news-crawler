@@ -2,6 +2,7 @@ from .article_pool import ArticlePool
 from .config import ROOT, load_settings
 from .crawler import article_id, crawl
 from .discovery import SourceDiscovery
+from .epub import EpubGenerator
 from .extractor import ArticleExtractor
 from .registry import SourceRegistry
 
@@ -9,17 +10,20 @@ from .registry import SourceRegistry
 def run() -> None:
     settings = load_settings()
     registry = SourceRegistry()
+    active_sources = [
+        source
+        for source in registry.list_sources()
+        if source.get("status") == "active"
+    ]
 
-    for source in registry.list_sources():
-        if source.get("status") != "active":
-            continue
+    output_dir = ROOT / settings.get("storage", {}).get(
+        "article_pool", "data/article_pool"
+    )
 
+    for source in active_sources:
         refs = SourceDiscovery(source, settings).discover()
         print(f"{source['id']}: discovered {len(refs)} article URLs")
 
-        output_dir = ROOT / settings.get("storage", {}).get(
-            "article_pool", "data/article_pool"
-        )
         crawl(refs, source, settings, output_dir)
 
         extractor = ArticleExtractor()
@@ -42,6 +46,18 @@ def run() -> None:
             article["id"] = item_id
             article["source_id"] = ref.source_id
             pool.write_article(article)
+
+    epub_path = ROOT / settings.get("storage", {}).get(
+        "epub", "data/editions/0neNews.epub"
+    )
+    EpubGenerator().generate(
+        article_pool=output_dir,
+        output_path=epub_path,
+        sources=active_sources,
+        title=settings.get("edition", {}).get("title", "YOUR NEWS"),
+        edition_time=settings.get("edition", {}).get("time", "07:00"),
+    )
+    print(f"EPUB generated: {epub_path}")
 
 
 if __name__ == "__main__":
