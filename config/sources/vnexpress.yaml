@@ -3,6 +3,10 @@ name: VnExpress
 url: https://vnexpress.net
 status: active
 
+http:
+  headers:
+    Referer: https://vnexpress.net/
+
 # The configured URL is the crawl boundary. No RSS, sitemap or pagination.
 discovery:
   - html

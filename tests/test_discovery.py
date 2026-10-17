@@ -61,3 +61,15 @@ def test_vnexpress_selector_first_ignores_author_links(monkeypatch):
         "https://vnexpress.net/viet-nam-thuy-si-thuc-day-hop-tac-khoa-hoc-cong-nghe-5133639.html",
         "https://vnexpress.net/du-kien-nang-nguong-doanh-thu-xac-dinh-doanh-nghiep-nho-va-vua-len-400-ty-dong-5133605.html",
     ]
+
+
+def test_http_defaults_are_browser_like():
+    source = {"id": "vnexpress", "url": "https://vnexpress.net"}
+    discovery = SourceDiscovery(
+        source,
+        {"crawler": {"request_timeout": 5}},
+    )
+    ua = discovery.session.headers["User-Agent"]
+    assert ua.startswith("Mozilla/5.0")
+    assert "Chrome/" in ua
+    assert discovery.session.headers["Accept-Language"].startswith("vi")

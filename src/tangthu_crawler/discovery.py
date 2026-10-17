@@ -16,7 +16,27 @@ class SourceDiscovery:
         crawler=settings.get("crawler",{})
         self.timeout=crawler.get("request_timeout",20)
         self.session=requests.Session()
-        self.session.headers.update({"User-Agent":crawler.get("user_agent","TangThuNewsCrawler/0.1")})
+
+        # Browser-like defaults. Some Vietnamese news sites return a
+        # different response to datacenter/robot-style user agents.
+        user_agent = crawler.get(
+            "user_agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/131.0.0.0 Safari/537.36",
+        )
+        self.session.headers.update({
+            "User-Agent": user_agent,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,"
+                      "image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "vi,en-US;q=0.8,en;q=0.6",
+            "Accept-Encoding": "gzip, deflate",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+        })
+
+        # Optional source-specific HTTP headers.
+        self.session.headers.update(source.get("http", {}).get("headers", {}))
 
     def discover(self)->list[ArticleRef]:
         urls=[]
@@ -30,7 +50,25 @@ class SourceDiscovery:
         return self._normalize(urls)
 
     def _get(self,url):
-        r=self.session.get(url,timeout=self.timeout); r.raise_for_status(); return r.text
+        r=self.session.get(
+            url,
+            timeout=self.timeout,
+            allow_redirects=True,
+        )
+        print(
+            f"{self.source.get('id','source')}: "
+            f"HTTP status={r.status_code} "
+            f"final_url={r.url} "
+            f"content_type={r.headers.get('Content-Type','')} "
+            f"bytes={len(r.content)} "
+            f"server={r.headers.get('Server','-')}"
+        )
+        print(
+            f"{self.source.get('id','source')}: "
+            f"user_agent={self.session.headers.get('User-Agent')}"
+        )
+        r.raise_for_status()
+        return r.text
 
     def _html(self):
         cfg=self.source.get("html",{})
