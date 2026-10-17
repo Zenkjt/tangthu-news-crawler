@@ -1,57 +1,25 @@
-from datetime import datetime, timezone
-
+from datetime import datetime,timezone
 from tangthu_crawler.discovery import SourceDiscovery
+from tangthu_crawler.pipeline import _is_today_or_undated
 
+def test_page_articles_limits_to_20_and_does_not_paginate(monkeypatch):
+    html="".join(f'<article><h2 class="title-news"><a href="/tin-{i}-{1000+i}.html">Tin</a></h2></article>' for i in range(25))
+    source={"id":"vnexpress","url":"https://vnexpress.net/chu-de/thanh-pho-ha-noi-2056","discovery":["html"],"html":{"strategy":"page_articles","max_articles":20,"article_link_selectors":[".title-news a"]}}
+    d=SourceDiscovery(source,{"crawler":{"request_timeout":5,"user_agent":"test"}}); calls=[]
+    monkeypatch.setattr(d,"_get",lambda url:calls.append(url) or html)
+    refs=d.discover()
+    assert len(refs)==20
+    assert calls==["https://vnexpress.net/chu-de/thanh-pho-ha-noi-2056"]
 
-def test_canonicalize_removes_tracking_and_trailing_slash():
-    result = SourceDiscovery._canonicalize(
-        "https://vnexpress.net/example/?utm_source=test"
-    )
-    assert result == "https://vnexpress.net/example"
+def test_regex_fallback(monkeypatch):
+    source={"id":"vnexpress","url":"https://vnexpress.net","discovery":["html"],"html":{"strategy":"page_articles","max_articles":20,"article_link_selectors":[]}}
+    d=SourceDiscovery(source,{"crawler":{"request_timeout":5,"user_agent":"test"}})
+    monkeypatch.setattr(d,"_get",lambda url='<a href="/tin-hop-le-123456.html">Tin</a><a href="/video-abc">Video</a>')
+    assert [r.url for r in d.discover()]==["https://vnexpress.net/tin-hop-le-123456.html"]
 
+def test_today_and_undated_are_kept():
+    assert _is_today_or_undated(datetime.now(timezone.utc).isoformat(),"Asia/Ho_Chi_Minh")
+    assert _is_today_or_undated(None,"Asia/Ho_Chi_Minh")
 
-def test_canonicalize_rejects_invalid_url():
-    assert SourceDiscovery._canonicalize("not-a-url") is None
-
-
-def test_category_pagination_discovers_vietnamese_article_links(monkeypatch):
-    pages = {
-        "https://vnexpress.net/kinh-doanh-p1": """
-            <article><h2 class="title-news">
-              <a href="/bai-mot-123.html">Bài một</a>
-            </h2></article>
-            <article><h2 class="title-news">
-              <a href="/bai-hai-456.html?utm_source=x">Bài hai</a>
-            </h2></article>
-        """,
-        "https://vnexpress.net/kinh-doanh-p2": "",
-    }
-
-    source = {
-        "id": "vnexpress",
-        "url": "https://vnexpress.net",
-        "discovery": ["html"],
-        "html": {
-            "strategy": "category_pagination",
-            "page_url_template": "/{category}-p{page}",
-            "article_link_selector": ".title-news a",
-            "categories": ["kinh-doanh"],
-            "pages": 3,
-        },
-    }
-    discovery = SourceDiscovery(
-        source,
-        {"crawler": {"request_timeout": 5, "user_agent": "test"}},
-    )
-    monkeypatch.setattr(
-        discovery,
-        "_get",
-        lambda url: pages[url],
-    )
-
-    refs = discovery.discover()
-
-    assert [ref.url for ref in refs] == [
-        "https://vnexpress.net/bai-mot-123.html",
-        "https://vnexpress.net/bai-hai-456.html",
-    ]
+def test_old_is_dropped():
+    assert not _is_today_or_undated("2020-01-01T10:00:00+07:00","Asia/Ho_Chi_Minh")

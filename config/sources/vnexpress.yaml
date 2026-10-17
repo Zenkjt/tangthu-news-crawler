@@ -3,29 +3,18 @@ name: VnExpress
 url: https://vnexpress.net
 status: active
 
-# Vietnamese-news architecture: category pages are primary.
-# RSS is intentionally not required.
+# The configured URL is the crawl boundary. No RSS, sitemap or pagination.
 discovery:
   - html
 
 html:
-  strategy: category_pagination
-  page_url_template: "/{category}-p{page}"
-  article_link_selector: ".title-news a"
-  pages: 1
-  categories:
-    - thoi-su
-    - du-lich
-    - the-gioi
-    - kinh-doanh
-    - khoa-hoc
-    - giai-tri
-    - the-thao
-    - phap-luat
-    - giao-duc
-    - suc-khoe
-    - doi-song
-  max_urls: 300
+  strategy: page_articles
+  max_articles: 20
+  article_link_selectors:
+    - ".title-news a"
+    - "article h3 a"
+    - "article h2 a"
+    - "article a"
 
 extractor:
   engine: newspaper4k
