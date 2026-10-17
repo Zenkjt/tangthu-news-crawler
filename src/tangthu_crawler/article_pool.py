@@ -5,18 +5,27 @@ from pathlib import Path
 
 
 class ArticlePool:
-    """Read crawled raw HTML files and write normalized Article JSON."""
+    """Persist and retrieve raw crawl metadata and normalized articles."""
 
     def __init__(self, root: str | Path):
         self.root = Path(root)
 
-    def iter_html(self):
-        yield from self.root.glob("*/*.html")
+    def metadata_path(self, source_id: str, article_id: str) -> Path:
+        return self.root / source_id / f"{article_id}.meta.json"
+
+    def html_path(self, source_id: str, article_id: str) -> Path:
+        return self.root / source_id / f"{article_id}.html"
+
+    def article_path(self, source_id: str, article_id: str) -> Path:
+        return self.root / source_id / f"{article_id}.json"
+
+    def read_metadata(self, source_id: str, article_id: str) -> dict:
+        path = self.metadata_path(source_id, article_id)
+        return json.loads(path.read_text(encoding="utf-8"))
 
     def write_article(self, article: dict) -> Path:
-        source_id = article["source_id"]
-        filename = article["id"]
-        target = self.root / source_id / f"{filename}.json"
+        target = self.article_path(article["source_id"], article["id"])
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(
             json.dumps(article, ensure_ascii=False, indent=2),
             encoding="utf-8",

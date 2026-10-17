@@ -1,6 +1,6 @@
 from .article_pool import ArticlePool
 from .config import ROOT, load_settings
-from .crawler import crawl
+from .crawler import article_id, crawl
 from .discovery import SourceDiscovery
 from .extractor import ArticleExtractor
 from .registry import SourceRegistry
@@ -26,21 +26,22 @@ def run() -> None:
         pool = ArticlePool(output_dir)
 
         for ref in refs:
-            html_path = pool.root / ref.source_id
-            matches = list(html_path.glob("*.html"))
-            # The crawler names files from the URL hash; find the matching file
-            # without duplicating URL hashing logic in the pipeline.
-            for raw_file in matches:
-                try:
-                    article = extractor.extract(raw_file, ref.url)
-                except Exception as exc:
-                    print(f"{source['id']}: extraction failed {ref.url}: {exc}")
-                    continue
+            item_id = article_id(ref.url)
+            html_path = pool.html_path(ref.source_id, item_id)
 
-                article["source_id"] = ref.source_id
-                article["id"] = raw_file.stem
-                pool.write_article(article)
-                break
+            if not html_path.exists():
+                print(f"{source['id']}: crawl missing {ref.url}")
+                continue
+
+            try:
+                article = extractor.extract(html_path, ref.url)
+            except Exception as exc:
+                print(f"{source['id']}: extraction failed {ref.url}: {exc}")
+                continue
+
+            article["id"] = item_id
+            article["source_id"] = ref.source_id
+            pool.write_article(article)
 
 
 if __name__ == "__main__":

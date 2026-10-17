@@ -1,4 +1,4 @@
-from tangthu_crawler.crawler import ArticleSpider
+from tangthu_crawler.crawler import ArticleSpider, article_id
 
 
 def test_allowed_domain_accepts_source_and_subdomain():
@@ -22,7 +22,7 @@ def test_allowed_domain_rejects_other_domain():
     assert not spider._allowed_domain("https://example.org/a")
 
 
-def test_filename_is_stable():
+def test_article_id_is_stable():
     url = "https://example.com/article/123"
-    assert ArticleSpider._filename(url) == ArticleSpider._filename(url)
-    assert len(ArticleSpider._filename(url)) == 32
+    assert article_id(url) == article_id(url)
+    assert len(article_id(url)) == 32

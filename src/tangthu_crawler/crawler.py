@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -8,6 +10,11 @@ import scrapy
 from scrapy.crawler import CrawlerProcess
 
 from .models import ArticleRef
+
+
+def article_id(url: str) -> str:
+    """Return the stable ID used for all representations of an article URL."""
+    return hashlib.sha256(url.encode("utf-8")).hexdigest()[:32]
 
 
 class ArticleSpider(scrapy.Spider):
@@ -45,34 +52,47 @@ class ArticleSpider(scrapy.Spider):
             )
 
     def parse_article(self, response):
-        url = response.url
+        url = response.meta["article_url"]
         source_id = response.meta["source_id"]
 
-        if not self._allowed_domain(url):
-            self.logger.warning("Skipped off-domain URL: %s", url)
+        if not self._allowed_domain(response.url):
+            self.logger.warning("Skipped off-domain URL: %s", response.url)
             return
 
-        filename = self._filename(url)
-        target = self.output_dir / source_id / f"{filename}.html"
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_bytes(response.body)
+        item_id = article_id(url)
+        target_dir = self.output_dir / source_id
+        target_dir.mkdir(parents=True, exist_ok=True)
 
-        yield {
+        html_path = target_dir / f"{item_id}.html"
+        meta_path = target_dir / f"{item_id}.meta.json"
+
+        html_path.write_bytes(response.body)
+
+        metadata = {
+            "id": item_id,
             "source_id": source_id,
             "url": url,
+            "fetched_url": response.url,
             "status": response.status,
-            "content_type": response.headers.get(b"Content-Type", b"").decode(
-                "latin-1", errors="replace"
-            ),
-            "path": str(target),
+            "content_type": response.headers.get(
+                b"Content-Type", b""
+            ).decode("latin-1", errors="replace"),
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "html_path": str(html_path),
         }
+        meta_path.write_text(
+            json.dumps(metadata, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+        yield metadata
 
     def handle_error(self, failure):
         request = failure.request
         self.logger.warning(
             "Crawl failed: %s %s",
             request.meta.get("source_id"),
-            request.url,
+            request.meta.get("article_url", request.url),
         )
 
     def _allowed_domain(self, url: str) -> bool:
@@ -81,10 +101,6 @@ class ArticleSpider(scrapy.Spider):
         if not configured or not actual:
             return False
         return actual == configured or actual.endswith("." + configured)
-
-    @staticmethod
-    def _filename(url: str) -> str:
-        return hashlib.sha256(url.encode("utf-8")).hexdigest()[:32]
 
 
 def crawl(
