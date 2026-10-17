@@ -37,10 +37,7 @@ class EpubGenerator:
                 continue
             articles.append(self._apply_policy(article, source.get("policy", {})))
 
-        articles.sort(
-            key=lambda a: a.get("published_at") or "",
-            reverse=True,
-        )
+        articles.sort(key=lambda a: a.get("published_at") or "", reverse=True)
 
         now = datetime.now(self.timezone)
         date_label = now.strftime("%-d %B %Y")
@@ -57,10 +54,7 @@ class EpubGenerator:
             lang="vi",
         )
         intro.content = self._edition_html(
-            title=title,
-            edition_time=edition_time,
-            date_label=date_label,
-            article_count=len(articles),
+            title, edition_time, date_label, len(articles)
         )
         book.add_item(intro)
         chapters.append(intro)
@@ -78,8 +72,8 @@ class EpubGenerator:
         book.toc = tuple(chapters)
         book.add_item(epub.EpubNcx())
         book.add_item(epub.EpubNav())
-
         book.spine = ["nav", *chapters]
+
         output.parent.mkdir(parents=True, exist_ok=True)
         epub.write_epub(str(output), book)
         return output
@@ -98,16 +92,10 @@ class EpubGenerator:
             result["body"] = body
         else:
             result["body"] = body[:800].strip()
-
         return result
 
     @staticmethod
-    def _edition_html(
-        title: str,
-        edition_time: str,
-        date_label: str,
-        article_count: int,
-    ) -> str:
+    def _edition_html(title, edition_time, date_label, article_count):
         return f"""<html><head><title>{html.escape(title)}</title></head>
 <body>
 <h1>{html.escape(title)} at {html.escape(edition_time)}</h1>
@@ -133,11 +121,7 @@ class EpubGenerator:
             paragraphs = f"<p>{body}</p>"
 
         meta = " · ".join(x for x in (source, published, author) if x)
-        link = (
-            f'<p><a href="{url}">Original article</a></p>'
-            if url
-            else ""
-        )
+        link = f'<p><a href="{url}">Original article</a></p>' if url else ""
 
         return f"""<html><head><title>{title}</title></head>
 <body>
