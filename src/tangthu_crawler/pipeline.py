@@ -1,3 +1,5 @@
+import os
+
 from .article_pool import ArticlePool
 from .config import ROOT, load_settings
 from .crawler import article_id, crawl
@@ -5,6 +7,8 @@ from .discovery import SourceDiscovery
 from .epub import EpubGenerator
 from .extractor import ArticleExtractor
 from .registry import SourceRegistry
+from .validator import validate_epub
+from .drive_upload import upload_epub
 
 
 def run() -> None:
@@ -68,8 +72,26 @@ def run() -> None:
         edition_time=settings.get("edition", {}).get("time", "07:00"),
         article_ids=edition_article_ids,
     )
-    print(f"EPUB generated: {epub_path}")
+    validate_epub(epub_path)
+    print(f"EPUB validated: {epub_path}")
+
+    if os.getenv("TANGTHU_UPLOAD_ENABLED", "false").strip().lower() == "true":
+        result = upload_epub(
+            epub_path,
+            filename=settings.get("drive_upload", {}).get(
+                "filename", "0neNews.epub"
+            ),
+        )
+        print(
+            "Drive upload complete: "
+            f"{result.get('filename', '0neNews.epub')} "
+            f"(file_id={result.get('file_id', 'unknown')}, "
+            f"operation={result.get('operation', 'unknown')})"
+        )
+    else:
+        print("Drive upload skipped: TANGTHU_UPLOAD_ENABLED is not true.")
 
 
 if __name__ == "__main__":
+    import os
     run()
