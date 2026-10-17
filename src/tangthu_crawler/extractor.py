@@ -36,9 +36,26 @@ class ArticleExtractor:
 
     def _extract_vnexpress(self, html: str, url: str) -> dict:
         soup = BeautifulSoup(html, "html.parser")
-        container = soup.select_one("article.fck_detail, .fck_detail")
+        container = None
+        for selector in (
+            "article.fck_detail",
+            "#article_content.fck_detail",
+            "#article_content",
+            "article.content_detail",
+            ".content_detail.fck_detail",
+            ".main_content_detail",
+        ):
+            candidate = soup.select_one(selector)
+            if candidate is None:
+                continue
+            paragraph_count = len(candidate.select("p"))
+            text_length = len(candidate.get_text(" ", strip=True))
+            if paragraph_count >= 1 or text_length >= 200:
+                container = candidate
+                break
+
         if container is None:
-            raise ValueError("VnExpress article body .fck_detail not found")
+            raise ValueError("VnExpress article body container not found")
 
         for node in container.select("script, style, noscript"):
             node.decompose()
