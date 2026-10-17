@@ -52,3 +52,27 @@ def test_vnexpress_falls_back_to_content_detail(tmp_path):
     )
     assert "Đoạn nội dung một." in article["body"]
     assert "Đoạn nội dung hai." in article["body"]
+
+
+def test_vnexpress_generic_container_fallback(tmp_path):
+    html = """
+    <html><body>
+      <h1 class="title-detail">Bài dùng template khác</h1>
+      <main class="article-shell">
+        <p>Đoạn nội dung thứ nhất của bài báo.</p>
+        <p>Đoạn nội dung thứ hai của bài báo.</p>
+        <p>Đoạn nội dung thứ ba của bài báo.</p>
+      </main>
+    </body></html>
+    """
+    path = tmp_path / "article.html"
+    path.write_text(html, encoding="utf-8")
+
+    article = ArticleExtractor().extract(
+        path,
+        "https://vnexpress.net/test-789.html",
+        {"extractor": {"engine": "vnexpress"}},
+    )
+
+    assert "Đoạn nội dung thứ nhất" in article["body"]
+    assert "Đoạn nội dung thứ ba" in article["body"]

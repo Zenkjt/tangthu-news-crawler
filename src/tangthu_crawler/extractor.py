@@ -36,40 +36,69 @@ class ArticleExtractor:
 
     def _extract_vnexpress(self, html: str, url: str) -> dict:
         soup = BeautifulSoup(html, "html.parser")
-        container = None
-        for selector in (
+
+        selectors = (
             "article.fck_detail",
             "#article_content.fck_detail",
             "#article_content",
             "article.content_detail",
             ".content_detail.fck_detail",
             ".main_content_detail",
-        ):
-            candidate = soup.select_one(selector)
-            if candidate is None:
-                continue
-            paragraph_count = len(candidate.select("p"))
-            text_length = len(candidate.get_text(" ", strip=True))
-            if paragraph_count >= 1 or text_length >= 200:
-                container = candidate
-                break
+            ".fck_detail",
+            "article",
+            "main",
+        )
 
-        if container is None:
+        candidates = []
+        seen_nodes = set()
+
+        for selector in selectors:
+            for candidate in soup.select(selector):
+                marker = id(candidate)
+                if marker in seen_nodes:
+                    continue
+                seen_nodes.add(marker)
+
+                paragraph_count = len(candidate.select("p"))
+                text = " ".join(candidate.stripped_strings)
+                text_length = len(text)
+                if paragraph_count < 2 and text_length < 300:
+                    continue
+
+                link_text = " ".join(
+                    " ".join(node.stripped_strings)
+                    for node in candidate.select("a")
+                )
+                link_ratio = len(link_text) / text_length if text_length else 1.0
+
+                score = (
+                    min(text_length, 12000) / 100
+                    + min(paragraph_count, 40) * 2
+                    - link_ratio * 20
+                )
+                candidates.append((score, candidate))
+
+        if not candidates:
             raise ValueError("VnExpress article body container not found")
 
-        for node in container.select("script, style, noscript"):
+        _, container = max(candidates, key=lambda item: item[0])
+
+        for node in container.select("script, style, noscript, nav, form"):
             node.decompose()
 
         blocks = []
         seen = set()
         for node in container.select("p, h2, h3, blockquote, figcaption"):
-            text = " ".join(node.stripped_strings)
-            if not text or text in seen:
+            value = " ".join(node.stripped_strings)
+            if not value or value in seen:
                 continue
-            seen.add(text)
-            blocks.append(text)
+            seen.add(value)
+            blocks.append(value)
 
         body = "\n\n".join(blocks).strip()
+        if not body:
+            body = " ".join(container.stripped_strings).strip()
+
         if not body:
             raise ValueError("VnExpress article body is empty")
 
@@ -100,7 +129,9 @@ class ArticleExtractor:
                     break
 
         image = None
-        image_node = container.select_one("img[data-src], img[data-original], img[src]")
+        image_node = container.select_one(
+            "img[data-src], img[data-original], img[src]"
+        )
         if image_node:
             image = (
                 image_node.get("data-src")

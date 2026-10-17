@@ -23,4 +23,4 @@ extractor:
   engine: vnexpress
 
 policy:
-  mode: excerpt
+  mode: full_article
