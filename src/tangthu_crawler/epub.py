@@ -54,18 +54,13 @@ class EpubGenerator:
         book.set_title(f"{title} at {edition_time} — {date_label}")
         book.set_language("vi")
         book.add_author("Tàng Thư")
-        book.add_metadata(
-            "DC",
-            "publisher",
-            "Tàng Thư",
-        )
+        book.add_metadata("DC", "publisher", "Tàng Thư")
         book.add_metadata(
             "DC",
             "description",
             f"{title} at {edition_time} — {date_label}",
         )
 
-        # Intro/cover page.
         edition = epub.EpubHtml(
             title="Edition",
             file_name="edition.xhtml",
@@ -76,7 +71,6 @@ class EpubGenerator:
         )
         book.add_item(edition)
 
-        # One article XHTML per article.
         article_chapters = []
         for index, article in enumerate(articles, start=1):
             chapter = epub.EpubHtml(
@@ -88,7 +82,6 @@ class EpubGenerator:
             book.add_item(chapter)
             article_chapters.append(chapter)
 
-        # Visible in-book TOC: one hierarchy level per source.
         toc_page = epub.EpubHtml(
             title="Mục lục",
             file_name="toc.xhtml",
@@ -97,26 +90,11 @@ class EpubGenerator:
         toc_page.content = self._toc_html(articles, source_map)
         book.add_item(toc_page)
 
-        # Native EPUB navigation hierarchy:
-        #   Source
-        #     Article
-        # No deeper hierarchy is created.
         source_groups = {}
         for chapter, article in zip(article_chapters, articles):
             source_id = article.get("source_id") or "Nguồn khác"
             source_groups.setdefault(source_id, []).append(chapter)
 
-        source_entries = []
-        for source_id, chapters in source_groups.items():
-            source_name = source_map.get(source_id, {}).get("name") or source_id
-            source_entries.append(
-                epub.Section(source_name),
-            )
-            source_entries.append(
-                tuple(chapters)
-            )
-
-        # Keep a flat fallback for readers that do not expose sections well.
         book.toc = tuple(
             [
                 epub.Link(
@@ -167,7 +145,8 @@ class EpubGenerator:
     def _edition_html(title, edition_time, date_label, article_count):
         return f"""<html><head><title>{html.escape(title)}</title></head>
 <body>
-<h1>{html.escape(title)} at {html.escape(edition_time)}</h1>
+<h1>{html.escape(title)}</h1>
+<p>{html.escape(edition_time)}</p>
 <p>{html.escape(date_label)}</p>
 <p>{article_count} articles</p>
 </body></html>"""
@@ -201,22 +180,37 @@ class EpubGenerator:
 </body></html>"""
 
     def _article_html(self, article):
-        title = html.escape(article.get("title") or "Untitled")
-        author = html.escape(article.get("author") or "")
-        source = html.escape(article.get("source_id") or "")
-        published = html.escape(article.get("published_at") or "")
+        # Text nodes do not need quote/apostrophe escaping in XHTML.
+        # Some e-readers display &quot; / &#x27; literally when those
+        # entities are emitted by the generator.
+        title = html.escape(
+            article.get("title") or "Untitled",
+            quote=False,
+        )
+        author = html.escape(
+            article.get("author") or "",
+            quote=False,
+        )
+        source = html.escape(
+            article.get("source_id") or "",
+            quote=False,
+        )
+        published = html.escape(
+            article.get("published_at") or "",
+            quote=False,
+        )
         url = html.escape(
             article.get("canonical_url") or article.get("url") or ""
         )
-        body = html.escape(article.get("body") or "")
+        body = article.get("body") or ""
 
         paragraphs = "\n".join(
-            f"<p>{html.escape(line.strip())}</p>"
+            f"<p>{html.escape(line.strip(), quote=False)}</p>"
             for line in body.splitlines()
             if line.strip()
         )
         if not paragraphs and body:
-            paragraphs = f"<p>{body}</p>"
+            paragraphs = f"<p>{html.escape(body, quote=False)}</p>"
 
         meta = " · ".join(x for x in (source, published, author) if x)
         link = (
