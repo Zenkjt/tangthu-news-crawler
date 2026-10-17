@@ -41,7 +41,7 @@ class ArticleSpider(scrapy.Spider):
         self.source = source
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def start_requests(self):
+    async def start(self):
         for ref in self.refs:
             yield scrapy.Request(
                 ref.url,
