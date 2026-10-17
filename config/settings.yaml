@@ -1,7 +1,6 @@
 project: tangthu-news-crawler
 timezone: Asia/Ho_Chi_Minh
 crawler:
-  user_agent: "TangThuNewsCrawler/0.1"
   request_timeout: 20
   concurrency: 8
   retry_times: 2
