@@ -173,7 +173,7 @@ class EpubGenerator:
 </body></html>"""
 
     @staticmethod
-    def _toc_html(articles):
+    def _toc_html(articles, source_map):
         items = []
         current_source = None
         for index, article in enumerate(articles, start=1):
