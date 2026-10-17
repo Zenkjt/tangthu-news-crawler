@@ -52,7 +52,7 @@ def test_generated_epub_passes_structural_validation(tmp_path: Path):
         assert "Fixture News" in toc
         assert "Test Article one" in toc
         assert "article-1.xhtml" in toc
-        assert "Fixture News" in nav
+        assert "toc.xhtml" in nav
 
 
 def test_validator_rejects_broken_epub(tmp_path: Path):
