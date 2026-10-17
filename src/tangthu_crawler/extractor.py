@@ -48,51 +48,30 @@ class ArticleExtractor:
         soup = BeautifulSoup(html, "html.parser")
 
         selectors = (
-            "article.fck_detail",
-            "#article_content.fck_detail",
-            "#article_content",
-            "article.content_detail",
-            ".content_detail.fck_detail",
-            ".main_content_detail",
-            ".fck_detail",
-            "article",
-            "main",
+            "article.fck_detail", "#article_content.fck_detail", "#article_content",
+            "article.content_detail", ".content_detail.fck_detail", ".main_content_detail",
+            ".fck_detail", "article", "main",
         )
-
         candidates = []
         seen_nodes = set()
-
         for selector in selectors:
             for candidate in soup.select(selector):
                 marker = id(candidate)
                 if marker in seen_nodes:
                     continue
                 seen_nodes.add(marker)
-
                 paragraph_count = len(candidate.select("p"))
                 text = self._clean_text(" ".join(candidate.stripped_strings))
                 text_length = len(text)
                 if paragraph_count < 2 and text_length < 300:
                     continue
-
-                link_text = self._clean_text(
-                    " ".join(
-                        " ".join(node.stripped_strings)
-                        for node in candidate.select("a")
-                    )
-                )
+                link_text = self._clean_text(" ".join(" ".join(node.stripped_strings) for node in candidate.select("a")))
                 link_ratio = len(link_text) / text_length if text_length else 1.0
-
-                score = (
-                    min(text_length, 12000) / 100
-                    + min(paragraph_count, 40) * 2
-                    - link_ratio * 20
-                )
+                score = min(text_length, 12000) / 100 + min(paragraph_count, 40) * 2 - link_ratio * 20
                 candidates.append((score, candidate))
 
         if not candidates:
             raise ValueError("VnExpress article body container not found")
-
         _, container = max(candidates, key=lambda item: item[0])
 
         for node in container.select("script, style, noscript, nav, form"):
@@ -106,11 +85,9 @@ class ArticleExtractor:
                 continue
             seen.add(value)
             blocks.append(value)
-
         body = "\n\n".join(blocks).strip()
         if not body:
             body = self._clean_text(" ".join(container.stripped_strings))
-
         if not body:
             raise ValueError("VnExpress article body is empty")
 
@@ -118,18 +95,12 @@ class ArticleExtractor:
         title = self._clean_text(title_node.get_text(" ", strip=True)) if title_node else ""
 
         description_node = soup.select_one("p.description, .description")
-        description = (
-            self._clean_text(description_node.get_text(" ", strip=True))
-            if description_node
-            else ""
-        )
+        description = self._clean_text(description_node.get_text(" ", strip=True)) if description_node else ""
         if description and description not in body:
             body = f"{description}\n\n{body}"
 
         date_node = soup.select_one("span.date, .date")
-        published_at = self._parse_vnexpress_date(
-            date_node.get_text(" ", strip=True) if date_node else ""
-        )
+        published_at = self._parse_vnexpress_date(date_node.get_text(" ", strip=True) if date_node else "")
 
         author = None
         for selector in (".author_mail", ".author", ".Normal strong"):
@@ -141,15 +112,9 @@ class ArticleExtractor:
                     break
 
         image = None
-        image_node = container.select_one(
-            "img[data-src], img[data-original], img[src]"
-        )
+        image_node = container.select_one("img[data-src], img[data-original], img[src]")
         if image_node:
-            image = (
-                image_node.get("data-src")
-                or image_node.get("data-original")
-                or image_node.get("src")
-            )
+            image = image_node.get("data-src") or image_node.get("data-original") or image_node.get("src")
             if image:
                 image = urljoin(url, image)
 
@@ -158,14 +123,31 @@ class ArticleExtractor:
         canonical_url = urljoin(url, canonical_url)
 
         return {
-            "url": url,
-            "canonical_url": canonical_url,
-            "title": title.strip(),
-            "author": author,
-            "published_at": published_at,
-            "body": body,
-            "image": image,
+            "url": url, "canonical_url": canonical_url, "title": title.strip(),
+            "author": author, "published_at": published_at, "body": body, "image": image,
         }
+
+    @staticmethod
+    def quality_check(article: dict, source: dict | None = None) -> tuple[bool, str]:
+        """Reject listing/tag-like pages after fetch, using source-configurable thresholds."""
+        cfg=(source or {}).get("quality_gate", {})
+        if not cfg.get("enabled", False):
+            return True, ""
+        title=(article.get("title") or "").strip()
+        body=(article.get("body") or "").strip()
+        if cfg.get("require_title", True) and not title:
+            return False, "missing_title"
+        reject_titles={str(x).strip().casefold() for x in cfg.get("reject_titles", [])}
+        if title.casefold() in reject_titles:
+            return False, "generic_title"
+        min_chars=int(cfg.get("min_body_chars", 300))
+        if len(body) < min_chars:
+            return False, "body_too_short"
+        min_paragraphs=int(cfg.get("min_paragraphs", 2))
+        paragraphs=[p for p in body.splitlines() if p.strip()]
+        if len(paragraphs) < min_paragraphs:
+            return False, "too_few_paragraphs"
+        return True, ""
 
     @staticmethod
     def _parse_vnexpress_date(value: str) -> str | None:
@@ -173,9 +155,7 @@ class ArticleExtractor:
             return None
         for fmt in ("%d/%m/%Y, %H:%M (GMT+7)", "%d/%m/%Y, %H:%M"):
             try:
-                return datetime.strptime(value, fmt).replace(
-                    tzinfo=timezone(timedelta(hours=7))
-                ).isoformat()
+                return datetime.strptime(value, fmt).replace(tzinfo=timezone(timedelta(hours=7))).isoformat()
             except ValueError:
                 pass
         return None
@@ -183,7 +163,7 @@ class ArticleExtractor:
     @staticmethod
     def _first_author(authors: list[str]) -> str | None:
         for author in authors:
-            value = author.strip()
+            value=author.strip()
             if value:
                 return value
         return None

@@ -16,9 +16,6 @@ class SourceDiscovery:
         crawler=settings.get("crawler",{})
         self.timeout=crawler.get("request_timeout",20)
         self.session=requests.Session()
-
-        # Browser-like defaults. Some Vietnamese news sites return a
-        # different response to datacenter/robot-style user agents.
         user_agent = crawler.get(
             "user_agent",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -34,8 +31,6 @@ class SourceDiscovery:
             "Connection": "keep-alive",
             "Upgrade-Insecure-Requests": "1",
         })
-
-        # Optional source-specific HTTP headers.
         self.session.headers.update(source.get("http", {}).get("headers", {}))
 
     def discover(self)->list[ArticleRef]:
@@ -50,23 +45,13 @@ class SourceDiscovery:
         return self._normalize(urls)
 
     def _get(self,url):
-        r=self.session.get(
-            url,
-            timeout=self.timeout,
-            allow_redirects=True,
-        )
+        r=self.session.get(url,timeout=self.timeout,allow_redirects=True)
         print(
-            f"{self.source.get('id','source')}: "
-            f"HTTP status={r.status_code} "
-            f"final_url={r.url} "
-            f"content_type={r.headers.get('Content-Type','')} "
-            f"bytes={len(r.content)} "
-            f"server={r.headers.get('Server','-')}"
+            f"{self.source.get('id','source')}: HTTP status={r.status_code} "
+            f"final_url={r.url} content_type={r.headers.get('Content-Type','')} "
+            f"bytes={len(r.content)} server={r.headers.get('Server','-')}"
         )
-        print(
-            f"{self.source.get('id','source')}: "
-            f"user_agent={self.session.headers.get('User-Agent')}"
-        )
+        print(f"{self.source.get('id','source')}: user_agent={self.session.headers.get('User-Agent')}")
         r.raise_for_status()
         return r.text
 
@@ -80,72 +65,42 @@ class SourceDiscovery:
     def _html_page_articles(self,cfg):
         page_url=self.source["url"]
         limit=max(1,int(cfg.get("max_articles",20)))
-        selectors=cfg.get(
-            "article_link_selectors",
-            [".title-news a","article h3 a","article h2 a"],
-        )
+        selectors=cfg.get("article_link_selectors",[".title-news a","article h3 a","article h2 a"])
         try:
             soup=BeautifulSoup(self._get(page_url),"html.parser")
         except requests.RequestException as exc:
             print(f"{self.source.get('id','source')}: page fetch failed {page_url}: {exc}")
             return []
 
-        links=[]
-        seen=set()
-
-        # Primary discovery: use the source-specific article selectors.
-        # VnExpress exposes current article cards through .title-news a / article h3 a.
+        links=[]; seen=set()
         for selector in selectors:
             for a in soup.select(selector):
                 href=a.get("href")
-                if not href:
-                    continue
+                if not href: continue
                 url=self._canonicalize(urljoin(page_url,href))
-                if not url or url in seen:
-                    continue
-                if not self._is_article_url(url):
-                    continue
-                seen.add(url)
-                links.append(url)
+                if not url or url in seen or not self._is_article_url(url): continue
+                seen.add(url); links.append(url)
                 if len(links)>=limit:
-                    print(
-                        f"{self.source.get('id','source')}: "
-                        f"page={page_url} article_links={len(links)} max={limit}"
-                    )
+                    print(f"{self.source.get('id','source')}: page={page_url} article_links={len(links)} max={limit}")
                     return links
 
-        # Fallback only: scan all links by URL shape.
         for a in soup.find_all("a",href=True):
             url=self._canonicalize(urljoin(page_url,a["href"]))
-            if not url or url in seen:
-                continue
-            if not self._is_article_url(url):
-                continue
-            seen.add(url)
-            links.append(url)
-            if len(links)>=limit:
-                break
+            if not url or url in seen or not self._is_article_url(url): continue
+            seen.add(url); links.append(url)
+            if len(links)>=limit: break
 
-        print(
-            f"{self.source.get('id','source')}: "
-            f"page={page_url} article_links={len(links)} max={limit}"
-        )
+        print(f"{self.source.get('id','source')}: page={page_url} article_links={len(links)} max={limit}")
         return links[:limit]
 
     def _is_article_url(self,url):
         path=urlparse(url).path.lower()
-
-        # VnExpress article URLs are /slug-<numeric_id>.html.
-        # Exclude author/profile and other known non-article paths.
-        excluded_prefixes=(
-            "/tac-gia/",
-            "/author/",
-            "/chu-de/",
-            "/video/",
+        excluded_prefixes=tuple(
+            p.lower().rstrip("/") + "/"
+            for p in self.source.get("html",{}).get("excluded_path_prefixes",[])
         )
         if any(path.startswith(prefix) for prefix in excluded_prefixes):
             return False
-
         return bool(self.ARTICLE_HREF_RE.search(path))
 
     def _html_category_pagination(self,cfg):

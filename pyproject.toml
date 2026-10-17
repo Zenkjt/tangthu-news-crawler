@@ -14,6 +14,7 @@ dependencies = [
   "newspaper4k>=0.9.3",
   "lxml_html_clean>=0.4",
   "EbookLib>=0.18",
+  "Pillow>=10.0",
 ]
 
 [project.optional-dependencies]

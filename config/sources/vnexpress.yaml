@@ -18,9 +18,32 @@ html:
     - "article h3 a"
     - "article h2 a"
     - "article a"
+  excluded_path_prefixes:
+    - /tag/
+    - /topic/
+    - /search/
+    - /tim-kiem/
+    - /category/
+    - /photo/
+    - /podcast/
+    - /live/
+    - /infographics/
+    - /video/
+    - /chu-de/
+    - /tac-gia/
+    - /author/
 
 extractor:
   engine: vnexpress
+
+quality_gate:
+  enabled: true
+  require_title: true
+  min_body_chars: 300
+  min_paragraphs: 2
+  reject_titles:
+    - Untitled
+    - Article
 
 policy:
   mode: full_article

@@ -29,17 +29,23 @@ def run():
         except Exception as exc: print(f"{source['id']}: discovery failed: {exc}"); continue
         try: crawl(refs,source,settings,output_dir)
         except Exception as exc: print(f"{source['id']}: crawl failed: {exc}"); continue
-        kept=dropped_old=0
+        kept=dropped_old=dropped_quality=0
         for ref in refs:
             item_id=article_id(ref.url); html_path=pool.html_path(ref.source_id,item_id)
             if not html_path.exists(): print(f"{source['id']}: crawl missing {ref.url}"); continue
             try:
                 article=extractor.extract(html_path,ref.url,source)
-                article["id"]=item_id; article["source_id"]=ref.source_id; pool.write_article(article)
+                article["id"]=item_id; article["source_id"]=ref.source_id
+                ok,reason=extractor.quality_check(article,source)
+                if not ok:
+                    dropped_quality+=1
+                    print(f"{source['id']}: quality drop {ref.url}: {reason}")
+                    continue
+                pool.write_article(article)
                 if _is_today_or_undated(article.get("published_at"),timezone_name): edition_article_ids.add(item_id); kept+=1
                 else: dropped_old+=1
             except Exception as exc: print(f"{source['id']}: extraction failed {ref.url}: {exc}")
-        print(f"{source['id']}: edition kept={kept}, dropped_old={dropped_old}")
+        print(f"{source['id']}: edition kept={kept}, dropped_old={dropped_old}, dropped_quality={dropped_quality}")
     epub_path=ROOT/settings.get("storage",{}).get("editions","data/editions")/"0neNews.epub"
     EpubGenerator(timezone=timezone_name).generate(article_pool=output_dir,output_path=epub_path,sources=active_sources,title=settings.get("edition",{}).get("title","YOUR NEWS"),edition_time=settings.get("edition",{}).get("time","07:00"),article_ids=edition_article_ids)
     validate_epub(epub_path); print(f"EPUB validated: {epub_path}")

@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
-@dataclass(frozen=True)
+@dataclass
 class ArticleRef:
     source_id: str
     url: str
