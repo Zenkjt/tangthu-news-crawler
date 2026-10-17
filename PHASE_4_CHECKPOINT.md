@@ -2,38 +2,21 @@
 
 Date: 17 October 2026
 
-## Fix
+## Fix 2
 
-newspaper4k does not provide `Article.set_html()`.
+The previous implementation passed `input_html` to `Article(...)`, but newspaper4k's current API expects cached HTML in:
 
-The correct API for parsing already-downloaded HTML is `Article(input_html=...)`.
-This is also the mechanism exposed by newspaper4k's CLI for parsing HTML from a file.
-
-Therefore the extractor now:
-
-```text
-Scrapy
-  ↓
-raw HTML
-  ↓
-Article(input_html=raw_html)
-  ↓
+```python
+article.download(input_html=html)
 article.parse()
-  ↓
-normalized Article
 ```
 
-No second HTTP request is made.
+The `download(input_html=...)` path sets `download_state=SUCCESS` and stores the supplied HTML without performing an HTTP request. The subsequent `parse()` then works normally.
 
-## Test status
+`canonical_url` now uses `article.canonical_link` when available.
 
-The two failing extractor tests are fixed:
+## Decision
 
-- core article fields
-- missing publication date
+Scrapy remains the only network crawler. newspaper4k receives the already-downloaded HTML and never performs a second article request.
 
-The missing-date test now actually removes the date metadata instead of testing a fixture that contains a date.
-
-## Reference
-
-newspaper4k documentation confirms `input_html` is used for parsing supplied HTML without downloading it.
+Reference: newspaper4k `Article.download()` documents `input_html` as cached article HTML and its source sets the successful download state before `parse()`.

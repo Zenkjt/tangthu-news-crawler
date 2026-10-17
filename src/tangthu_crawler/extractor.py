@@ -12,19 +12,20 @@ class ArticleExtractor:
         path = Path(html_path)
         html = path.read_text(encoding="utf-8", errors="replace")
 
-        # newspaper4k supports parsing supplied HTML through input_html.
-        # This avoids a second network request because Scrapy already fetched
-        # and stored the page.
         article = Article(
             url=url,
-            input_html=html,
             fetch_images=False,
         )
+
+        # input_html belongs to download(), not Article.__init__().
+        # This marks the Article as successfully downloaded without making
+        # another HTTP request, then parse() operates on that cached HTML.
+        article.download(input_html=html)
         article.parse()
 
         return {
             "url": url,
-            "canonical_url": article.url,
+            "canonical_url": article.canonical_link or article.url,
             "title": article.title.strip(),
             "author": self._first_author(article.authors),
             "published_at": (
@@ -33,7 +34,7 @@ class ArticleExtractor:
                 else None
             ),
             "body": article.text.strip(),
-            "image": article.top_image or None,
+            "image": article.top_image or article.meta_img or None,
         }
 
     @staticmethod
