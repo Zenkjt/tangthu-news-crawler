@@ -16,13 +16,23 @@ def test_extracts_core_article_fields():
     assert "first paragraph" in result["body"]
     assert result["author"] == "Jane Doe"
     assert result["image"] == "https://example.com/image.jpg"
+    assert result["published_at"] is not None
 
 
 def test_missing_date_is_allowed():
-    result = ArticleExtractor().extract(
-        FIXTURE,
-        "https://example.com/test-article",
+    html = FIXTURE.read_text(encoding="utf-8").replace(
+        '<meta property="article:published_time" '
+        'content="2026-10-17T07:00:00+07:00">',
+        "",
     )
-    assert result["published_at"] is None or isinstance(
-        result["published_at"], str
-    )
+    missing_date = FIXTURE.parent / "article-no-date.html"
+    missing_date.write_text(html, encoding="utf-8")
+
+    try:
+        result = ArticleExtractor().extract(
+            missing_date,
+            "https://example.com/test-article",
+        )
+        assert result["published_at"] is None
+    finally:
+        missing_date.unlink(missing_ok=True)

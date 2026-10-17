@@ -2,54 +2,38 @@
 
 Date: 17 October 2026
 
-## Completed
+## Fix
 
-Integrated newspaper4k as the default article extraction engine.
+newspaper4k does not provide `Article.set_html()`.
 
-Pipeline:
+The correct API for parsing already-downloaded HTML is `Article(input_html=...)`.
+This is also the mechanism exposed by newspaper4k's CLI for parsing HTML from a file.
+
+Therefore the extractor now:
 
 ```text
-Discovery
-    ↓
 Scrapy
-    ↓
+  ↓
 raw HTML
-    ↓
-newspaper4k
-    ↓
+  ↓
+Article(input_html=raw_html)
+  ↓
+article.parse()
+  ↓
 normalized Article
-    ↓
-Article Pool JSON
 ```
 
-## Normalized fields
+No second HTTP request is made.
 
-- `id`
-- `source_id`
-- `url`
-- `canonical_url`
-- `title`
-- `author`
-- `published_at`
-- `body`
-- `image`
+## Test status
 
-## Decisions
+The two failing extractor tests are fixed:
 
-- newspaper4k is the default extractor.
-- Extraction runs after crawling, against stored raw HTML.
-- Missing optional metadata does not fail extraction.
-- Raw HTML is retained; normalized JSON is an additional representation.
-- No EPUB generation yet.
-- No Google Drive upload yet.
-- No OPDS logic yet.
-- Source-specific custom extractors remain a later fallback when newspaper4k quality is insufficient.
+- core article fields
+- missing publication date
 
-## Important implementation note
+The missing-date test now actually removes the date metadata instead of testing a fixture that contains a date.
 
-The current phase establishes the extraction interface and normalized Article shape.
-Before production-scale crawling, the Article Pool should be tightened so each raw HTML file is mapped to its exact ArticleRef by URL hash rather than scanning source files.
+## Reference
 
-## Next phase
-
-Phase 5: Article Pool / dedup / persistence hardening, then EPUB generation.
+newspaper4k documentation confirms `input_html` is used for parsing supplied HTML without downloading it.
