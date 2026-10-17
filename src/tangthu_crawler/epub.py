@@ -1,5 +1,6 @@
-import shutil
 from __future__ import annotations
+
+import shutil
 
 import html
 import json
