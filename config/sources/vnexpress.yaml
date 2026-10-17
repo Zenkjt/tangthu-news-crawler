@@ -1,0 +1,12 @@
+id: vnexpress
+name: VnExpress
+url: https://vnexpress.net
+status: active
+discovery:
+  - rss
+  - sitemap
+  - html
+extractor:
+  engine: newspaper4k
+policy:
+  mode: excerpt
