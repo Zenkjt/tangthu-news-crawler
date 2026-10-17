@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from html import unescape
 from pathlib import Path
 from urllib.parse import urljoin
 
@@ -20,6 +21,15 @@ class ArticleExtractor:
             return self._extract_vnexpress(html, url)
         return self._extract_newspaper4k(html, url)
 
+    @staticmethod
+    def _clean_text(value: str | None) -> str:
+        """Normalize whitespace and decode HTML entities, including double-encoded ones."""
+        if not value:
+            return ""
+        value = unescape(value)
+        value = unescape(value)
+        return " ".join(value.split())
+
     def _extract_newspaper4k(self, html: str, url: str) -> dict:
         article = Article(url=url, fetch_images=False)
         article.download(input_html=html)
@@ -27,10 +37,10 @@ class ArticleExtractor:
         return {
             "url": url,
             "canonical_url": article.canonical_link or article.url,
-            "title": article.title.strip(),
+            "title": self._clean_text(article.title),
             "author": self._first_author(article.authors),
             "published_at": article.publish_date.isoformat() if article.publish_date else None,
-            "body": article.text.strip(),
+            "body": self._clean_text(article.text),
             "image": article.top_image or article.meta_img or None,
         }
 
@@ -60,14 +70,16 @@ class ArticleExtractor:
                 seen_nodes.add(marker)
 
                 paragraph_count = len(candidate.select("p"))
-                text = " ".join(candidate.stripped_strings)
+                text = self._clean_text(" ".join(candidate.stripped_strings))
                 text_length = len(text)
                 if paragraph_count < 2 and text_length < 300:
                     continue
 
-                link_text = " ".join(
-                    " ".join(node.stripped_strings)
-                    for node in candidate.select("a")
+                link_text = self._clean_text(
+                    " ".join(
+                        " ".join(node.stripped_strings)
+                        for node in candidate.select("a")
+                    )
                 )
                 link_ratio = len(link_text) / text_length if text_length else 1.0
 
@@ -89,7 +101,7 @@ class ArticleExtractor:
         blocks = []
         seen = set()
         for node in container.select("p, h2, h3, blockquote, figcaption"):
-            value = " ".join(node.stripped_strings)
+            value = self._clean_text(" ".join(node.stripped_strings))
             if not value or value in seen:
                 continue
             seen.add(value)
@@ -97,17 +109,17 @@ class ArticleExtractor:
 
         body = "\n\n".join(blocks).strip()
         if not body:
-            body = " ".join(container.stripped_strings).strip()
+            body = self._clean_text(" ".join(container.stripped_strings))
 
         if not body:
             raise ValueError("VnExpress article body is empty")
 
         title_node = soup.select_one("h1.title-detail, h1")
-        title = title_node.get_text(" ", strip=True) if title_node else ""
+        title = self._clean_text(title_node.get_text(" ", strip=True)) if title_node else ""
 
         description_node = soup.select_one("p.description, .description")
         description = (
-            description_node.get_text(" ", strip=True)
+            self._clean_text(description_node.get_text(" ", strip=True))
             if description_node
             else ""
         )
@@ -123,7 +135,7 @@ class ArticleExtractor:
         for selector in (".author_mail", ".author", ".Normal strong"):
             node = soup.select_one(selector)
             if node:
-                value = node.get_text(" ", strip=True)
+                value = self._clean_text(node.get_text(" ", strip=True))
                 if value and len(value) <= 120:
                     author = value
                     break

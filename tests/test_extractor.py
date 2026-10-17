@@ -76,3 +76,28 @@ def test_vnexpress_generic_container_fallback(tmp_path):
 
     assert "Đoạn nội dung thứ nhất" in article["body"]
     assert "Đoạn nội dung thứ ba" in article["body"]
+
+
+def test_vnexpress_decodes_double_encoded_html_entities(tmp_path):
+    html = """
+    <html><body>
+      <h1 class="title-detail">Nga ca ngợi &amp;#x27;khoảnh khắc lịch sử&amp;#x27;</h1>
+      <article class="fck_detail">
+        <p>Ông nói &amp;quot;đây là một bước ngoặt&amp;quot;.</p>
+        <p>Đây là đoạn thứ hai của bài báo.</p>
+      </article>
+    </body></html>
+    """
+    path = tmp_path / "article.html"
+    path.write_text(html, encoding="utf-8")
+
+    article = ArticleExtractor().extract(
+        path,
+        "https://vnexpress.net/test-entities-123.html",
+        {"extractor": {"engine": "vnexpress"}},
+    )
+
+    assert "'khoảnh khắc lịch sử'" in article["title"]
+    assert '"đây là một bước ngoặt".' in article["body"]
+    assert "&amp;quot;" not in article["body"]
+    assert "&#x27;" not in article["body"]
