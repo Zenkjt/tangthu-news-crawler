@@ -94,7 +94,7 @@ class EpubGenerator:
             file_name="toc.xhtml",
             lang="vi",
         )
-        toc_page.content = self._toc_html(articles)
+        toc_page.content = self._toc_html(articles, source_map)
         book.add_item(toc_page)
 
         # Native EPUB navigation hierarchy:
@@ -177,7 +177,8 @@ class EpubGenerator:
         items = []
         current_source = None
         for index, article in enumerate(articles, start=1):
-            source = article.get("source_id") or "Nguồn khác"
+            source_id = article.get("source_id") or "Nguồn khác"
+            source = source_map.get(source_id, {}).get("name") or source_id
             title = html.escape(article.get("title") or f"Article {index}")
             if source != current_source:
                 if current_source is not None:
@@ -195,8 +196,7 @@ class EpubGenerator:
 <body>
 <h1>Mục lục</h1>
 <ul>
-""" + "
-".join(items) + """
+""" + "\n".join(items) + """
 </ul>
 </body></html>"""
 
@@ -210,8 +210,7 @@ class EpubGenerator:
         )
         body = html.escape(article.get("body") or "")
 
-        paragraphs = "
-".join(
+        paragraphs = "\n".join(
             f"<p>{html.escape(line.strip())}</p>"
             for line in body.splitlines()
             if line.strip()
