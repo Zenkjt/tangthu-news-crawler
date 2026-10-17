@@ -19,6 +19,27 @@ class EpubGenerator:
         self.image_timeout = image_timeout
         self.image_size = (480, 800)
 
+    def _normalize_image(self, source, output_path):
+        """Create a CrossPoint-compatible 480x800 grayscale baseline JPEG."""
+        image = ImageOps.exif_transpose(source).convert("L")
+        target_width, target_height = self.image_size
+        # ImageOps.fit center-crops landscape/oversized images, then resizes exactly.
+        image = ImageOps.fit(
+            image,
+            self.image_size,
+            method=Image.Resampling.LANCZOS,
+            centering=(0.5, 0.5),
+        )
+        image.save(
+            output_path,
+            format="JPEG",
+            quality=88,
+            progressive=False,
+            optimize=False,
+            subsampling=0,
+        )
+        return Path(output_path)
+
     def generate(self, article_pool, output_path, sources, title="YOUR NEWS", edition_time="07:00", article_ids: set[str] | None = None):
         pool=Path(article_pool); output=Path(output_path); source_map={s["id"]:s for s in sources}; allowed_ids=article_ids; articles=[]
         for path in sorted(pool.glob("*/*.json")):
@@ -33,6 +54,27 @@ class EpubGenerator:
         now=datetime.now(self.timezone); date_label=now.strftime("%-d %B %Y")
         book=epub.EpubBook(); book.set_identifier(f"tangthu-news-{now:%Y%m%d}"); book.set_title(f"{title} at {edition_time} — {date_label}"); book.set_language("vi"); book.add_author("Tàng Thư"); book.add_metadata("DC","publisher","Tàng Thư"); book.add_metadata("DC","description",f"{title} at {edition_time} — {date_label}")
         edition=epub.EpubHtml(title="Edition",file_name="edition.xhtml",lang="vi"); edition.content=self._edition_html(title,edition_time,date_label,len(articles)); book.add_item(edition)
+
+        # A real cover image is registered in both EPUB 3 and EPUB 2 metadata.
+        cover_source = Path(__file__).resolve().parents[3] / "assets" / "0neNews-cover.jpg"
+        if not cover_source.exists():
+            cover_source = Path(__file__).resolve().parents[3] / "assets" / "0neNews-cover.jpg"
+        if not cover_source.exists():
+            cover_source = Path(__file__).resolve().parents[2] / "assets" / "0neNews-cover.jpg"
+        cover_bytes = cover_source.read_bytes() if cover_source.exists() else self._make_default_cover(date_label)
+        cover_item = epub.EpubItem(
+            uid="cover-image",
+            file_name="images/cover.jpg",
+            media_type="image/jpeg",
+            content=cover_bytes,
+        )
+        cover_item.properties = ["cover-image"]
+        book.add_item(cover_item)
+        book.add_metadata("OPF", "meta", "", {"name": "cover", "content": "cover-image"})
+        cover_page = epub.EpubHtml(title="Cover", file_name="cover.xhtml", lang="vi")
+        cover_page.content = """<html xmlns="http://www.w3.org/1999/xhtml" lang="vi"><head><title>YOUR NEWS</title></head><body style="margin:0;padding:0"><img src="images/cover.jpg" alt="Tàng Thư — YOUR NEWS" style="display:block;width:100%;height:auto" /></body></html>"""
+        cover_page.add_item(cover_item)
+        book.add_item(cover_page)
 
         article_chapters=[]; image_root=output.parent / ".epub-images"
         if image_root.exists(): shutil.rmtree(image_root,ignore_errors=True)
@@ -51,7 +93,7 @@ class EpubGenerator:
         source_groups={}
         for chapter,article in zip(article_chapters,articles): source_groups.setdefault(article.get("source_id") or "Nguồn khác",[]).append(chapter)
         book.toc=tuple([epub.Link("toc.xhtml","Mục lục","toc-page")]+[epub.Section(source_map.get(source_id,{}).get("name") or source_id,tuple(chapters)) for source_id,chapters in source_groups.items()])
-        book.add_item(epub.EpubNcx()); book.add_item(epub.EpubNav()); book.spine=["nav",edition,toc_page,*article_chapters]
+        book.add_item(epub.EpubNcx()); book.add_item(epub.EpubNav()); book.spine=["nav",cover_page,edition,toc_page,*article_chapters]
         output.parent.mkdir(parents=True,exist_ok=True); epub.write_epub(str(output),book); shutil.rmtree(image_root,ignore_errors=True); return output
 
     @staticmethod
@@ -85,20 +127,41 @@ class EpubGenerator:
             with urllib.request.urlopen(req,timeout=self.image_timeout) as response:
                 raw=response.read()
             with Image.open(io.BytesIO(raw)) as src:
-                image=ImageOps.exif_transpose(src).convert("RGB")
-                max_w, max_h = self.image_size
-                scale = min(max_w / image.width, max_h / image.height, 1.0)
-                if scale < 1.0:
-                    image = image.resize((max(1, round(image.width * scale)), max(1, round(image.height * scale))), Image.Resampling.LANCZOS)
-                canvas=Image.new("L",self.image_size,255)
-                gray=image.convert("L")
-                x=(self.image_size[0]-gray.width)//2; y=(self.image_size[1]-gray.height)//2
-                canvas.paste(gray,(x,y))
-                path=image_root/f"article-{index}.bmp"; canvas.save(path,format="BMP")
-            return epub.EpubImage(uid=f"image-{index}",file_name=f"images/article-{index}.bmp",media_type="image/bmp",content=path.read_bytes())
+                path=image_root/f"article-{index}.jpg"
+                self._normalize_image(src, path)
+            return epub.EpubImage(uid=f"image-{index}",file_name=f"images/article-{index}.jpg",media_type="image/jpeg",content=path.read_bytes())
         except Exception as exc:
             print(f"image download/convert failed {url}: {exc}")
             return None
+
+    @staticmethod
+    def _make_default_cover(date_label):
+        """Create a valid fallback grayscale baseline JPEG cover (480x800)."""
+        image = Image.new("L", (480, 800), 255)
+        from PIL import ImageDraw, ImageFont
+        draw = ImageDraw.Draw(image)
+        regular = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+        try:
+            font = ImageFont.truetype(bold, 50)
+            small = ImageFont.truetype(bold, 16)
+            detail = ImageFont.truetype(regular, 14)
+        except OSError:
+            font = small = detail = ImageFont.load_default()
+        draw.rectangle((34, 42, 446, 46), fill=0)
+        draw.text((34, 75), "TÀNG THƯ / DAILY EDITION", font=small, fill=0)
+        draw.text((34, 108), date_label.upper(), font=detail, fill=50)
+        draw.line((34, 143, 446, 143), fill=0, width=2)
+        draw.text((30, 300), "YOUR", font=font, fill=0)
+        draw.text((30, 360), "NEWS", font=font, fill=0)
+        draw.rectangle((34, 442, 446, 449), fill=0)
+        draw.text((34, 500), "Stories worth", font=small, fill=0)
+        draw.text((34, 525), "keeping.", font=small, fill=0)
+        draw.line((34, 740, 446, 740), fill=0, width=2)
+        draw.text((34, 755), "TÀNG THƯ", font=small, fill=0)
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", quality=90, progressive=False, optimize=False, subsampling=0)
+        return buffer.getvalue()
 
     def _article_html(self,article,index,image_item=None):
         title=html.escape(article.get("title") or "Untitled",quote=False); author=html.escape(article.get("author") or "",quote=False); source=html.escape(article.get("source_id") or "",quote=False); published=html.escape(article.get("published_at") or "",quote=False); url=html.escape(article.get("canonical_url") or article.get("url") or "")
