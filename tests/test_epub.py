@@ -9,8 +9,9 @@ ARTICLE_PATH = "EPUB/article-1.xhtml"
 
 
 def test_generate_daily_epub(tmp_path: Path):
-    pool = tmp_path / "pool" / "fixture"
-    pool.mkdir(parents=True)
+    pool = tmp_path / "pool"
+    fixture = pool / "fixture"
+    fixture.mkdir(parents=True)
 
     article = {
         "id": "abc",
@@ -22,7 +23,7 @@ def test_generate_daily_epub(tmp_path: Path):
         "published_at": "2026-10-17T01:00:00+00:00",
         "body": "First paragraph.\n\nSecond paragraph.",
     }
-    (pool / "abc.json").write_text(
+    (fixture / "abc.json").write_text(
         json.dumps(article, ensure_ascii=False), encoding="utf-8"
     )
 
@@ -52,9 +53,10 @@ def test_generate_daily_epub(tmp_path: Path):
 
 
 def test_metadata_only_policy(tmp_path: Path):
-    pool = tmp_path / "pool" / "fixture"
-    pool.mkdir(parents=True)
-    (pool / "abc.json").write_text(
+    pool = tmp_path / "pool"
+    fixture = pool / "fixture"
+    fixture.mkdir(parents=True)
+    (fixture / "abc.json").write_text(
         json.dumps({
             "id": "abc",
             "source_id": "fixture",

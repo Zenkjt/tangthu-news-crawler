@@ -1,61 +1,81 @@
-# Tàng Thư News Crawler — Phase 6 Checkpoint
-
-Date: 17 October 2026
+# PHASE 6 CHECKPOINT — EPUB GENERATION
 
 ## Status
+Phase 6 implementation is complete. The CI failure was caused by the test fixture passing the source directory itself to `EpubGenerator.generate()`.
 
-Phase 6 implementation is complete. The first CI run exposed a test-only path mismatch: EbookLib stores XHTML under `EPUB/`, not `OEBPS/`. The generator itself successfully produced a valid EPUB.
-
-## Final decision
-
-Use EbookLib as the EPUB engine. Tàng Thư assembles the edition and applies source policy; it does not implement the EPUB container itself.
-
-## Output
+## Root cause
+`EpubGenerator.generate()` is designed to receive the Article Pool root:
 
 ```text
-data/editions/0neNews.epub
+data/article_pool/
+├── vnexpress/
+│   └── <article>.json
+└── ...
 ```
 
-Fixed filename, ready for a later distribution phase.
+Its scan is intentionally:
 
-## EPUB structure
+```python
+pool.glob("*/*.json")
+```
 
-EbookLib generates:
+The test incorrectly passed:
+
+```text
+tmp_path/pool/fixture
+```
+
+so the generator searched:
+
+```text
+tmp_path/pool/fixture/*/*.json
+```
+
+and found no article. Therefore the generated EPUB correctly contained only the edition page, navigation, and OPF files.
+
+## Correct fix
+The tests now pass:
+
+```text
+tmp_path/pool/
+└── fixture/
+    └── abc.json
+```
+
+as the pool root.
+
+No change to `src/tangthu_crawler/epub.py` is required.
+
+## EPUB layout
+The generator uses EbookLib and produces:
 
 ```text
 mimetype
 META-INF/container.xml
 EPUB/content.opf
-EPUB/nav.xhtml
-EPUB/toc.ncx
 EPUB/edition.xhtml
 EPUB/article-1.xhtml
-EPUB/article-2.xhtml
-...
+EPUB/nav.xhtml
+EPUB/toc.ncx
 ```
 
-## Source policy
-
-- `metadata_only`: metadata + original link, no article body.
+## Policy
+- `metadata_only`: title/metadata + original link, no article body.
 - `excerpt`: first 800 characters.
 - `full_article`: full extracted body.
 - `licensed`: full extracted body.
-- unknown mode: falls back to `excerpt`.
+- unknown policy: excerpt fallback.
 
-## CI result
+## Edition
+Default:
+- filename: `0neNews.epub`
+- title: `YOUR NEWS at 07:00`
+- timezone: `Asia/Ho_Chi_Minh`
 
-Before fix:
+## Not yet implemented
+- Google Drive upload/overwrite
+- per-user personalization
+- OPDS integration
+- production scheduling/distribution
 
-- 10 tests passed
-- 2 EPUB tests failed
-- failure was caused by tests expecting `OEBPS/article-1.xhtml`
-- actual EbookLib path is `EPUB/article-1.xhtml`
-
-After fix, the tests should validate the actual EPUB layout.
-
-## Not included yet
-
-- Google Drive
-- OPDS
-- user personalization
-- GitHub artifact upload
+These belong to later phases.
