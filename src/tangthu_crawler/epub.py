@@ -175,17 +175,49 @@ class EpubGenerator:
         toc_page.content = self._toc_html(articles, source_map)
         book.add_item(toc_page)
 
-        # CrossPoint-compatible native TOC:
-        # keep it completely flat so non-touch "Select Chapter" can reach
-        # every article directly. Do not put toc.xhtml or nested Sections here.
-        book.toc = tuple(
-            epub.Link(
-                chapter.file_name,
-                chapter.title or f"Article {index}",
-                chapter.id,
+        # CrossPoint native TOC: Source is a level-1 navPoint and its
+        # articles are level-2 child navPoints. CrossPoint preserves the NCX
+        # depth and renders level-2 rows indented in Select Chapter.
+        #
+        # The source navPoint links to the first article, so selecting the
+        # source jumps directly to the beginning of that source.
+        native_toc = []
+        current_source_id = None
+        current_group = []
+
+        for index, (article, chapter) in enumerate(
+            zip(articles, article_chapters), start=1
+        ):
+            source_id = article.get("source_id")
+            if source_id != current_source_id:
+                if current_group:
+                    native_toc.append(tuple(current_group))
+                    current_group = []
+
+                source = source_map.get(source_id, {})
+                source_name = source.get("name") or source_id or "Nguồn khác"
+
+                current_group.append(
+                    epub.Link(
+                        chapter.file_name,
+                        source_name,
+                        f"source-{index}",
+                    )
+                )
+                current_source_id = source_id
+
+            current_group.append(
+                epub.Link(
+                    chapter.file_name,
+                    chapter.title or f"Article {index}",
+                    chapter.id,
+                )
             )
-            for index, chapter in enumerate(article_chapters, start=1)
-        )
+
+        if current_group:
+            native_toc.append(tuple(current_group))
+
+        book.toc = tuple(native_toc)
 
         book.add_item(epub.EpubNcx())
         book.add_item(epub.EpubNav())

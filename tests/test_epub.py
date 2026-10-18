@@ -58,8 +58,7 @@ def test_generated_epub_passes_structural_validation(tmp_path: Path):
         assert "Fixture News" in toc
         assert "Test Article one" in toc
         assert "article-1.xhtml" in toc
-        # Native EPUB navigation is intentionally flat and points directly
-        # to articles; toc.xhtml remains the reader-facing HTML TOC only.
+        assert "Fixture News" in nav
         assert "article-1.xhtml" in nav
         assert "toc.xhtml" not in nav
 
@@ -99,7 +98,7 @@ def test_toc_has_one_hierarchy_level_per_source(tmp_path: Path):
         assert "Test Article three" in toc
 
 
-def test_native_toc_is_flat_and_contains_every_article(tmp_path: Path):
+def test_native_toc_uses_crosspoint_hierarchy(tmp_path: Path):
     pool = tmp_path / "pool"
     _write_article(pool, "one", source_id="source_a")
     _write_article(pool, "two", source_id="source_a")
@@ -122,36 +121,41 @@ def test_native_toc_is_flat_and_contains_every_article(tmp_path: Path):
     nav_map, ns = _navmap(ncx)
     assert nav_map is not None
 
-    nav_points = nav_map.findall("ncx:navPoint", ns)
-    assert len(nav_points) == 3
+    top_level = nav_map.findall("ncx:navPoint", ns)
+    assert len(top_level) == 2
 
-    labels = [
-        point.find("ncx:navLabel/ncx:text", ns).text
-        for point in nav_points
-    ]
-    hrefs = [
-        point.find("ncx:content", ns).attrib["src"]
-        for point in nav_points
-    ]
+    assert [
+        p.find("ncx:navLabel/ncx:text", ns).text for p in top_level
+    ] == ["Nguồn A", "Nguồn B"]
 
-    assert labels == [
-        "Test Article one",
-        "Test Article two",
-        "Test Article three",
-    ]
-    assert hrefs == [
-        "article-1.xhtml",
-        "article-2.xhtml",
-        "article-3.xhtml",
-    ]
+    assert [
+        p.find("ncx:content", ns).attrib["src"] for p in top_level
+    ] == ["article-1.xhtml", "article-3.xhtml"]
 
-    # There must be no nested navPoint hierarchy and the HTML TOC page
-    # must not occupy a native chapter-selection entry.
+    first_children = top_level[0].findall("ncx:navPoint", ns)
+    second_children = top_level[1].findall("ncx:navPoint", ns)
+
+    assert [
+        p.find("ncx:navLabel/ncx:text", ns).text for p in first_children
+    ] == ["Test Article one", "Test Article two"]
+    assert [
+        p.find("ncx:navLabel/ncx:text", ns).text for p in second_children
+    ] == ["Test Article three"]
+
+    assert [
+        p.find("ncx:content", ns).attrib["src"] for p in first_children
+    ] == ["article-1.xhtml", "article-2.xhtml"]
+    assert [
+        p.find("ncx:content", ns).attrib["src"] for p in second_children
+    ] == ["article-3.xhtml"]
+
+    # Source rows are parents; article rows are children. CrossPoint uses
+    # this NCX depth to indent level-2 entries in Select Chapter.
     assert all(
-        point.find("ncx:navPoint", ns) is None
-        for point in nav_points
+        p.find("ncx:navPoint", ns) is not None
+        for p in top_level
     )
     assert all(
-        point.find("ncx:content", ns).attrib["src"] != "toc.xhtml"
-        for point in nav_points
+        p.find("ncx:content", ns).attrib["src"] != "toc.xhtml"
+        for p in top_level
     )
