@@ -101,6 +101,11 @@ class SourceDiscovery:
                 "/tac-gia/", "/author/", "/chu-de/", "/video/",
                 *configured_prefixes,
             ]
+
+        article_pattern = self.source.get("html", {}).get("article_href_regex")
+        if article_pattern:
+            return bool(re.search(article_pattern, path))
+
         excluded_prefixes=tuple(
             p.lower().rstrip("/") + "/"
             for p in configured_prefixes

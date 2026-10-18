@@ -56,11 +56,7 @@ class EpubGenerator:
         edition=epub.EpubHtml(title="Edition",file_name="edition.xhtml",lang="vi"); edition.content=self._edition_html(title,edition_time,date_label,len(articles)); book.add_item(edition)
 
         # A real cover image is registered in both EPUB 3 and EPUB 2 metadata.
-        cover_source = Path(__file__).resolve().parents[3] / "assets" / "0neNews-cover.jpg"
-        if not cover_source.exists():
-            cover_source = Path(__file__).resolve().parents[3] / "assets" / "0neNews-cover.jpg"
-        if not cover_source.exists():
-            cover_source = Path(__file__).resolve().parents[2] / "assets" / "0neNews-cover.jpg"
+        cover_source = Path(__file__).resolve().parents[2] / "assets" / "0neNews-cover.jpg"
         cover_bytes = cover_source.read_bytes() if cover_source.exists() else self._make_default_cover(date_label)
         cover_item = epub.EpubItem(
             uid="cover-image",
