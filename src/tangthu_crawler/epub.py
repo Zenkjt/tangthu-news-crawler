@@ -19,25 +19,28 @@ class EpubGenerator:
         self.image_timeout = image_timeout
         self.image_size = (480, 800)
 
-    def _normalize_image(self, source, output_path):
-        """Create a CrossPoint-compatible 480x800 grayscale baseline JPEG."""
+    def _encode_image(self, source, quality=70):
+        """Encode a CrossPoint-compatible 480x800 grayscale baseline JPEG."""
         image = ImageOps.exif_transpose(source).convert("L")
-        target_width, target_height = self.image_size
-        # ImageOps.fit center-crops landscape/oversized images, then resizes exactly.
         image = ImageOps.fit(
             image,
             self.image_size,
             method=Image.Resampling.LANCZOS,
             centering=(0.5, 0.5),
         )
+        buffer = io.BytesIO()
         image.save(
-            output_path,
+            buffer,
             format="JPEG",
-            quality=88,
+            quality=quality,
             progressive=False,
-            optimize=False,
+            optimize=True,
             subsampling=0,
         )
+        return buffer.getvalue()
+
+    def _normalize_image(self, source, output_path):
+        Path(output_path).write_bytes(self._encode_image(source, quality=70))
         return Path(output_path)
 
     def generate(self, article_pool, output_path, sources, title="YOUR NEWS", edition_time="07:00", article_ids: set[str] | None = None):
@@ -57,7 +60,11 @@ class EpubGenerator:
 
         # A real cover image is registered in both EPUB 3 and EPUB 2 metadata.
         cover_source = Path(__file__).resolve().parents[2] / "assets" / "0neNews-cover.jpg"
-        cover_bytes = cover_source.read_bytes() if cover_source.exists() else self._make_default_cover(date_label)
+        if cover_source.exists():
+            with Image.open(cover_source) as cover_image:
+                cover_bytes = self._encode_image(cover_image, quality=70)
+        else:
+            cover_bytes = self._make_default_cover(date_label)
         cover_item = epub.EpubItem(
             uid="cover-image",
             file_name="images/cover.jpg",
@@ -156,7 +163,7 @@ class EpubGenerator:
         draw.line((34, 740, 446, 740), fill=0, width=2)
         draw.text((34, 755), "TÀNG THƯ", font=small, fill=0)
         buffer = io.BytesIO()
-        image.save(buffer, format="JPEG", quality=90, progressive=False, optimize=False, subsampling=0)
+        image.save(buffer, format="JPEG", quality=70, progressive=False, optimize=True, subsampling=0)
         return buffer.getvalue()
 
     def _article_html(self,article,index,image_item=None):

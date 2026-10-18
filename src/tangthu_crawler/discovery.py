@@ -98,7 +98,8 @@ class SourceDiscovery:
                     print(f"{self.source.get('id','source')}: page={page_url} article_links={len(links)} max={limit}")
                     return links
 
-        return self._generic_links(soup, page_url, limit, seen)
+        print(f"{self.source.get('id','source')}: page={page_url} article_links={len(links)} max={limit}")
+        return links
 
     def _html_generic(self, cfg):
         page_url = self.source["url"]
