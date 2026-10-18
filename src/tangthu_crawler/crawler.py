@@ -32,9 +32,9 @@ def article_id(url: str) -> str:
     return hashlib.sha256(url.encode("utf-8")).hexdigest()[:32]
 
 
-def build_crawler_settings(settings: dict, source: dict) -> dict:
+def build_crawler_settings(settings: dict, source: dict | None = None) -> dict:
     crawler_cfg = settings.get("crawler", {})
-    source_http = source.get("http", {})
+    source_http = (source or {}).get("http", {})
 
     headers = dict(DEFAULT_REQUEST_HEADERS)
     headers.update(source_http.get("headers", {}))
@@ -74,22 +74,27 @@ class ArticleSpider(scrapy.Spider):
         refs: list[ArticleRef],
         output_dir: str | Path,
         settings: dict,
-        source: dict,
+        source: dict | None = None,
+        source_map: dict | None = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.refs = refs
         self.output_dir = Path(output_dir)
         self.settings_cfg = settings
-        self.source = source
+        self.source = source or {}
+        self.source_map = source_map or {}
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     async def start(self):
         for ref in self.refs:
+            source = self.source_map.get(ref.source_id, self.source) or {}
+            headers = dict(source.get("http", {}).get("headers", {}))
             yield scrapy.Request(
                 ref.url,
                 callback=self.parse_article,
                 errback=self.handle_error,
+                headers=headers,
                 meta={"source_id": ref.source_id, "article_url": ref.url},
                 dont_filter=False,
             )
@@ -98,7 +103,7 @@ class ArticleSpider(scrapy.Spider):
         url = response.meta["article_url"]
         source_id = response.meta["source_id"]
 
-        if not self._allowed_domain(response.url):
+        if not self._allowed_domain(response.url, source_id):
             self.logger.warning("Skipped off-domain URL: %s", response.url)
             return
 
@@ -133,17 +138,49 @@ class ArticleSpider(scrapy.Spider):
     def handle_error(self, failure):
         request = failure.request
         self.logger.warning(
-            "Crawl failed: %s %s",
+            "Crawl failed: source=%s url=%s type=%s error=%r",
             request.meta.get("source_id"),
             request.meta.get("article_url", request.url),
+            type(failure.value).__name__,
+            failure.value,
         )
 
-    def _allowed_domain(self, url: str) -> bool:
-        configured = urlparse(self.source["url"]).hostname
+    def _allowed_domain(self, url: str, source_id: str) -> bool:
+        source = self.source_map.get(source_id, self.source) or {}
+        configured = urlparse(source.get("url", "")).hostname
         actual = urlparse(url).hostname
         if not configured or not actual:
             return False
         return actual == configured or actual.endswith("." + configured)
+
+
+def crawl_sources(
+    jobs: list[tuple[list[ArticleRef], dict]],
+    settings: dict,
+    output_dir: str | Path,
+) -> None:
+    """Crawl all active sources in one Scrapy reactor run.
+
+    Scrapy's reactor cannot be restarted in the same Python process, so the
+    pipeline must schedule every source before calling process.start().
+    """
+    refs = []
+    source_map = {}
+    for source_refs, source in jobs:
+        refs.extend(source_refs)
+        source_map[source["id"]] = source
+    if not refs:
+        return
+
+    process = CrawlerProcess(settings=build_crawler_settings(settings))
+    process.crawl(
+        ArticleSpider,
+        refs=refs,
+        output_dir=output_dir,
+        settings=settings,
+        source_map=source_map,
+    )
+    process.start()
 
 
 def crawl(
@@ -152,15 +189,8 @@ def crawl(
     settings: dict,
     output_dir: str | Path,
 ) -> None:
-    if not refs:
-        return
+    """Backward-compatible single-source entry point.
 
-    process = CrawlerProcess(settings=build_crawler_settings(settings, source))
-    process.crawl(
-        ArticleSpider,
-        refs=refs,
-        output_dir=output_dir,
-        settings=settings,
-        source=source,
-    )
-    process.start()
+    New code should use crawl_sources() when processing multiple sources.
+    """
+    crawl_sources([(refs, source)], settings, output_dir)

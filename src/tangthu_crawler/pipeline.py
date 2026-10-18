@@ -1,11 +1,9 @@
 from datetime import datetime
-import json
 import os
-from pathlib import Path
 from zoneinfo import ZoneInfo
 from .article_pool import ArticlePool
 from .config import ROOT, load_settings
-from .crawler import article_id, crawl
+from .crawler import article_id, crawl_sources
 from .discovery import SourceDiscovery
 from .epub import EpubGenerator
 from .extractor import ArticleExtractor
@@ -28,41 +26,6 @@ def _is_today_or_undated(published_at, timezone_name):
     return published.astimezone(tz).date() == today
 
 
-def _build_with_size_cap(generator, article_pool, output_path, sources, title, edition_time, article_ids, max_bytes):
-    """Keep the newest articles while enforcing a hard EPUB size budget."""
-    pool = Path(article_pool)
-    records = []
-    for path in pool.glob("*/*.json"):
-        if path.name.endswith(".meta.json"):
-            continue
-        try:
-            article = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            continue
-        if article.get("id") not in article_ids:
-            continue
-        records.append((article.get("published_at") or "", article.get("id")))
-    records.sort(key=lambda item: item[0], reverse=True)
-    ordered = [item[1] for item in records]
-    while True:
-        generator.generate(
-            article_pool=article_pool,
-            output_path=output_path,
-            sources=sources,
-            title=title,
-            edition_time=edition_time,
-            article_ids=set(ordered),
-        )
-        size = output_path.stat().st_size
-        if size <= max_bytes or len(ordered) <= 1:
-            print(f"edition size={size} bytes cap={max_bytes} articles={len(ordered)}")
-            if size > max_bytes:
-                print("edition size cap could not be met with a single article")
-            return
-        # Remove the oldest remaining article first; the newest stay in the edition.
-        ordered.pop()
-
-
 def run():
     settings = load_settings()
     timezone_name = settings.get("timezone", "Asia/Ho_Chi_Minh")
@@ -72,21 +35,32 @@ def run():
     pool = ArticlePool(output_dir)
     extractor = ArticleExtractor()
     edition_article_ids = set()
+    crawl_jobs = []
+    discovered = {}
 
+    # Discover every source first, then run Scrapy exactly once. Scrapy's
+    # reactor is not restartable within the same Python process.
     for source in active_sources:
         try:
             refs = SourceDiscovery(source, settings).discover()
             limit = int(source.get("html", {}).get("max_articles", 20))
             refs = refs[:limit]
+            discovered[source["id"]] = refs
+            crawl_jobs.append((refs, source))
             print(f"{source['id']}: discovered {len(refs)} article URLs")
         except Exception as exc:
-            print(f"{source['id']}: discovery failed: {exc}")
-            continue
+            print(f"{source['id']}: discovery failed: {type(exc).__name__}: {exc!r}")
+
+    if crawl_jobs:
         try:
-            crawl(refs, source, settings, output_dir)
+            crawl_sources(crawl_jobs, settings, output_dir)
         except Exception as exc:
-            print(f"{source['id']}: crawl failed: {exc}")
-            continue
+            # Do not hide reactor/crawler failures behind an empty exception string.
+            print(f"crawl failed: {type(exc).__name__}: {exc!r}")
+            raise
+
+    for source in active_sources:
+        refs = discovered.get(source["id"], [])
         kept = dropped_old = dropped_quality = 0
         for ref in refs:
             item_id = article_id(ref.url)
@@ -110,22 +84,21 @@ def run():
                 else:
                     dropped_old += 1
             except Exception as exc:
-                print(f"{source['id']}: extraction failed {ref.url}: {exc}")
+                print(f"{source['id']}: extraction failed {ref.url}: {type(exc).__name__}: {exc!r}")
         print(f"{source['id']}: edition kept={kept}, dropped_old={dropped_old}, dropped_quality={dropped_quality}")
 
     epub_path = ROOT / settings.get("storage", {}).get("editions", "data/editions") / "0neNews.epub"
-    max_bytes = int(settings.get("edition", {}).get("max_epub_bytes", 1572864))
     generator = EpubGenerator(timezone=timezone_name)
-    _build_with_size_cap(
-        generator,
-        output_dir,
-        epub_path,
-        active_sources,
-        settings.get("edition", {}).get("title", "YOUR NEWS"),
-        settings.get("edition", {}).get("time", "07:00"),
-        edition_article_ids,
-        max_bytes,
+    generator.generate(
+        article_pool=output_dir,
+        output_path=epub_path,
+        sources=active_sources,
+        title=settings.get("edition", {}).get("title", "YOUR NEWS"),
+        edition_time=settings.get("edition", {}).get("time", "07:00"),
+        article_ids=edition_article_ids,
     )
+    size = epub_path.stat().st_size
+    print(f"edition size={size} bytes articles={len(edition_article_ids)}")
     validate_epub(epub_path)
     print(f"EPUB validated: {epub_path}")
     if os.getenv("TANGTHU_UPLOAD_ENABLED", "false").strip().lower() == "true":

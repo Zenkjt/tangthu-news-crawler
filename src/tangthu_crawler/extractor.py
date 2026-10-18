@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
 from urllib.parse import urljoin
+import json
 
 from bs4 import BeautifulSoup
 from newspaper import Article
@@ -32,16 +33,120 @@ class ArticleExtractor:
 
     def _extract_newspaper4k(self, html: str, url: str) -> dict:
         article = Article(url=url, fetch_images=False)
-        article.download(input_html=html)
-        article.parse()
-        return {
+        try:
+            article.download(input_html=html)
+            article.parse()
+        except Exception:
+            return self._extract_dom(html, url)
+
+        body = self._clean_paragraph_text(article.text)
+        result = {
             "url": url,
             "canonical_url": article.canonical_link or article.url,
             "title": self._clean_text(article.title),
             "author": self._first_author(article.authors),
             "published_at": article.publish_date.isoformat() if article.publish_date else None,
-            "body": self._clean_text(article.text),
+            "body": body,
             "image": article.top_image or article.meta_img or None,
+        }
+
+        # newspaper4k can parse the page but return an unusable body on
+        # modern JS-heavy sites. Fall back to structured HTML extraction.
+        if len(body) < 300 or len([p for p in body.splitlines() if p.strip()]) < 2:
+            fallback = self._extract_dom(html, url)
+            if len(fallback.get("body", "")) > len(body):
+                for key, value in fallback.items():
+                    if value:
+                        result[key] = value
+        return result
+
+    @staticmethod
+    def _clean_paragraph_text(value: str | None) -> str:
+        if not value:
+            return ""
+        lines = []
+        for raw in value.splitlines():
+            line = ArticleExtractor._clean_text(raw)
+            if line:
+                lines.append(line)
+        return "\n\n".join(lines)
+
+    def _extract_dom(self, html: str, url: str) -> dict:
+        soup = BeautifulSoup(html, "html.parser")
+        for node in soup.select("script, style, noscript, nav, form, footer, header"):
+            node.decompose()
+
+        # Prefer JSON-LD NewsArticle/articleBody when publishers expose it.
+        jsonld = []
+        for node in soup.select('script[type="application/ld+json"]'):
+            try:
+                data = json.loads(node.string or node.get_text())
+            except Exception:
+                continue
+            values = data if isinstance(data, list) else [data]
+            for value in values:
+                if isinstance(value, dict) and isinstance(value.get("articleBody"), str):
+                    jsonld.append(value)
+        structured = max(jsonld, key=lambda x: len(x.get("articleBody", "")), default=None)
+
+        candidates = []
+        selectors = (
+            '[itemprop="articleBody"]', 'article', 'main', '[role="main"]',
+            '.article-body', '.article__body', '.story-body', '.story__body',
+            '.article-content', '.article__content', '.story-content',
+        )
+        seen = set()
+        for selector in selectors:
+            for node in soup.select(selector):
+                if id(node) in seen:
+                    continue
+                seen.add(id(node))
+                paragraphs = [self._clean_text(p.get_text(" ", strip=True)) for p in node.select("p")]
+                paragraphs = [p for p in paragraphs if p]
+                text = "\n\n".join(dict.fromkeys(paragraphs))
+                if len(text) >= 300:
+                    link_text = self._clean_text(" ".join(a.get_text(" ", strip=True) for a in node.select("a")))
+                    link_ratio = len(link_text) / len(text) if text else 1
+                    score = min(len(text), 12000) / 100 + min(len(paragraphs), 40) * 2 - link_ratio * 20
+                    candidates.append((score, text))
+
+        body = max(candidates, key=lambda x: x[0])[1] if candidates else ""
+        if structured and len(structured.get("articleBody", "")) > len(body):
+            body = self._clean_paragraph_text(structured["articleBody"])
+
+        title_value = (structured or {}).get("headline")
+        if not title_value:
+            node = soup.select_one('meta[property="og:title"]')
+            title_value = node.get("content") if node else None
+        if not title_value:
+            node = soup.select_one("h1")
+            title_value = node.get_text(" ", strip=True) if node else ""
+        title = self._clean_text(title_value)
+
+        published = (structured or {}).get("datePublished")
+        if not published:
+            node = soup.select_one('meta[property="article:published_time"], meta[name="date"], time[datetime]')
+            published = (node.get("content") or node.get("datetime")) if node else None
+
+        image = (structured or {}).get("image")
+        if isinstance(image, dict):
+            image = image.get("url")
+        if isinstance(image, list):
+            image = image[0] if image else None
+        if not image:
+            node = soup.select_one('meta[property="og:image"]')
+            image = node.get("content") if node else None
+
+        canonical = soup.select_one('link[rel="canonical"]')
+        canonical_url = urljoin(url, canonical.get("href")) if canonical and canonical.get("href") else url
+        return {
+            "url": url,
+            "canonical_url": canonical_url,
+            "title": title,
+            "author": (structured or {}).get("author") if isinstance((structured or {}).get("author"), str) else None,
+            "published_at": published,
+            "body": body,
+            "image": urljoin(url, image) if image else None,
         }
 
     def _extract_vnexpress(self, html: str, url: str) -> dict:
