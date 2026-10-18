@@ -19,28 +19,25 @@ class EpubGenerator:
         self.image_timeout = image_timeout
         self.image_size = (480, 800)
 
-    def _encode_image(self, source, quality=70):
-        """Encode a CrossPoint-compatible 480x800 grayscale baseline JPEG."""
+    def _normalize_image(self, source, output_path):
+        """Create a CrossPoint-compatible 480x800 grayscale baseline JPEG."""
         image = ImageOps.exif_transpose(source).convert("L")
+        target_width, target_height = self.image_size
+        # ImageOps.fit center-crops landscape/oversized images, then resizes exactly.
         image = ImageOps.fit(
             image,
             self.image_size,
             method=Image.Resampling.LANCZOS,
             centering=(0.5, 0.5),
         )
-        buffer = io.BytesIO()
         image.save(
-            buffer,
+            output_path,
             format="JPEG",
-            quality=quality,
+            quality=88,
             progressive=False,
-            optimize=True,
+            optimize=False,
             subsampling=0,
         )
-        return buffer.getvalue()
-
-    def _normalize_image(self, source, output_path):
-        Path(output_path).write_bytes(self._encode_image(source, quality=70))
         return Path(output_path)
 
     def generate(self, article_pool, output_path, sources, title="YOUR NEWS", edition_time="07:00", article_ids: set[str] | None = None):
@@ -60,11 +57,7 @@ class EpubGenerator:
 
         # A real cover image is registered in both EPUB 3 and EPUB 2 metadata.
         cover_source = Path(__file__).resolve().parents[2] / "assets" / "0neNews-cover.jpg"
-        if cover_source.exists():
-            with Image.open(cover_source) as cover_image:
-                cover_bytes = self._encode_image(cover_image, quality=70)
-        else:
-            cover_bytes = self._make_default_cover(date_label)
+        cover_bytes = cover_source.read_bytes() if cover_source.exists() else self._make_default_cover(date_label)
         cover_item = epub.EpubItem(
             uid="cover-image",
             file_name="images/cover.jpg",
@@ -96,7 +89,7 @@ class EpubGenerator:
         source_groups={}
         for chapter,article in zip(article_chapters,articles): source_groups.setdefault(article.get("source_id") or "Nguồn khác",[]).append(chapter)
         book.toc=tuple([epub.Link("toc.xhtml","Mục lục","toc-page")]+[epub.Section(source_map.get(source_id,{}).get("name") or source_id,tuple(chapters)) for source_id,chapters in source_groups.items()])
-        book.add_item(epub.EpubNcx()); book.add_item(epub.EpubNav()); book.spine=["nav",cover_page,edition,toc_page,*article_chapters]
+        book.add_item(epub.EpubNcx()); book.add_item(epub.EpubNav()); book.spine=[cover_page,edition,toc_page,*article_chapters]
         output.parent.mkdir(parents=True,exist_ok=True); epub.write_epub(str(output),book); shutil.rmtree(image_root,ignore_errors=True); return output
 
     @staticmethod
@@ -110,7 +103,20 @@ class EpubGenerator:
 
     @staticmethod
     def _edition_html(title,edition_time,date_label,article_count):
-        return f"""<html><head><title>{html.escape(title)}</title></head><body><h1>{html.escape(title)}</h1><p>{html.escape(edition_time)}</p><p>{html.escape(date_label)}</p><p>{article_count} articles</p></body></html>"""
+        safe_title = html.escape(title)
+        safe_time = html.escape(edition_time)
+        safe_date = html.escape(date_label)
+        return f"""
+<html><head><title>{safe_title}</title></head>
+<body>
+  <div style="text-align:center; margin-top:28%;">
+    <h1 style="font-size:2.2em; margin:0 0 1.2em;">{safe_title}</h1>
+    <p style="font-size:1.35em; margin:0 0 0.45em;">{safe_time}</p>
+    <p style="font-size:1.25em; margin:0 0 1.8em;">{safe_date}</p>
+    <p style="font-size:1.05em; letter-spacing:0.08em;">{article_count} ARTICLES</p>
+  </div>
+</body></html>
+"""
 
     @staticmethod
     def _toc_html(articles,source_map):
@@ -163,7 +169,7 @@ class EpubGenerator:
         draw.line((34, 740, 446, 740), fill=0, width=2)
         draw.text((34, 755), "TÀNG THƯ", font=small, fill=0)
         buffer = io.BytesIO()
-        image.save(buffer, format="JPEG", quality=70, progressive=False, optimize=True, subsampling=0)
+        image.save(buffer, format="JPEG", quality=90, progressive=False, optimize=False, subsampling=0)
         return buffer.getvalue()
 
     def _article_html(self,article,index,image_item=None):
