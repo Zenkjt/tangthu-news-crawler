@@ -1,6 +1,7 @@
 import json
 import zipfile
 from pathlib import Path
+from xml.etree import ElementTree as ET
 
 import pytest
 
@@ -24,6 +25,11 @@ def _write_article(pool: Path, article_id: str, source_id="fixture", **extra) ->
         json.dumps(article),
         encoding="utf-8",
     )
+
+
+def _navmap(root):
+    ns = {"ncx": "http://www.daisy.org/z3986/2005/ncx/"}
+    return root.find("ncx:navMap", ns), ns
 
 
 def test_generated_epub_passes_structural_validation(tmp_path: Path):
@@ -88,3 +94,61 @@ def test_toc_has_one_hierarchy_level_per_source(tmp_path: Path):
         assert "Test Article one" in toc
         assert "Test Article two" in toc
         assert "Test Article three" in toc
+
+
+def test_native_toc_is_flat_and_contains_every_article(tmp_path: Path):
+    pool = tmp_path / "pool"
+    _write_article(pool, "one", source_id="source_a")
+    _write_article(pool, "two", source_id="source_a")
+    _write_article(pool, "three", source_id="source_b")
+
+    output = tmp_path / "0neNews.epub"
+    EpubGenerator().generate(
+        pool,
+        output,
+        sources=[
+            {"id": "source_a", "name": "Nguồn A", "status": "active", "policy": {"mode": "full_article"}},
+            {"id": "source_b", "name": "Nguồn B", "status": "active", "policy": {"mode": "full_article"}},
+        ],
+        article_ids=["one", "two", "three"],
+    )
+
+    with zipfile.ZipFile(output) as z:
+        ncx = ET.fromstring(z.read("EPUB/toc.ncx"))
+
+    nav_map, ns = _navmap(ncx)
+    assert nav_map is not None
+
+    nav_points = nav_map.findall("ncx:navPoint", ns)
+    assert len(nav_points) == 3
+
+    labels = [
+        point.find("ncx:navLabel/ncx:text", ns).text
+        for point in nav_points
+    ]
+    hrefs = [
+        point.find("ncx:content", ns).attrib["src"]
+        for point in nav_points
+    ]
+
+    assert labels == [
+        "Test Article one",
+        "Test Article two",
+        "Test Article three",
+    ]
+    assert hrefs == [
+        "article-1.xhtml",
+        "article-2.xhtml",
+        "article-3.xhtml",
+    ]
+
+    # There must be no nested navPoint hierarchy and the HTML TOC page
+    # must not occupy a native chapter-selection entry.
+    assert all(
+        point.find("ncx:navPoint", ns) is None
+        for point in nav_points
+    )
+    assert all(
+        point.find("ncx:content", ns).attrib["src"] != "toc.xhtml"
+        for point in nav_points
+    )
