@@ -1,6 +1,4 @@
-from datetime import datetime
 import os
-from zoneinfo import ZoneInfo
 from .article_pool import ArticlePool
 from .config import ROOT, load_settings
 from .crawler import article_id, crawl_sources
@@ -10,20 +8,6 @@ from .extractor import ArticleExtractor
 from .registry import SourceRegistry
 from .validator import validate_epub
 from .drive_upload import upload_epub
-
-
-def _is_today_or_undated(published_at, timezone_name):
-    if not published_at:
-        return True
-    try:
-        published = datetime.fromisoformat(published_at.replace("Z", "+00:00"))
-    except ValueError:
-        return True
-    tz = ZoneInfo(timezone_name)
-    today = datetime.now(tz).date()
-    if published.tzinfo is None:
-        return published.date() == today
-    return published.astimezone(tz).date() == today
 
 
 def run():
@@ -61,7 +45,7 @@ def run():
 
     for source in active_sources:
         refs = discovered.get(source["id"], [])
-        kept = dropped_old = dropped_quality = 0
+        kept = dropped_quality = 0
         for ref in refs:
             item_id = article_id(ref.url)
             html_path = pool.html_path(ref.source_id, item_id)
@@ -78,14 +62,13 @@ def run():
                     print(f"{source['id']}: quality drop {ref.url}: {reason}")
                     continue
                 pool.write_article(article)
-                if _is_today_or_undated(article.get("published_at"), timezone_name):
-                    edition_article_ids.add(item_id)
-                    kept += 1
-                else:
-                    dropped_old += 1
+                # Edition selection is intentionally based on discovery order,
+                # not publication date. Discovery is already bounded by max_articles.
+                edition_article_ids.add(item_id)
+                kept += 1
             except Exception as exc:
                 print(f"{source['id']}: extraction failed {ref.url}: {type(exc).__name__}: {exc!r}")
-        print(f"{source['id']}: edition kept={kept}, dropped_old={dropped_old}, dropped_quality={dropped_quality}")
+        print(f"{source['id']}: edition kept={kept}, dropped_quality={dropped_quality}")
 
     epub_path = ROOT / settings.get("storage", {}).get("editions", "data/editions") / "0neNews.epub"
     generator = EpubGenerator(timezone=timezone_name)
