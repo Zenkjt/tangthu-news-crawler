@@ -33,7 +33,7 @@ class EpubGenerator:
         image.save(
             output_path,
             format="JPEG",
-            quality=70,
+            quality=45,
             progressive=False,
             optimize=True,
             subsampling=2,
@@ -51,6 +51,16 @@ class EpubGenerator:
             articles.append(self._apply_policy(article, source.get("policy", {})))
         if order_map:
             articles.sort(key=lambda a: order_map.get(a.get("id"), 10**9))
+
+        # Keep the edition strictly grouped by registry source order. This is
+        # independent of filesystem order and prevents a source from reappearing
+        # later in the TOC when ArticlePool contains older/stale records.
+        source_order = {s.get("id"): i for i, s in enumerate(sources)}
+        if source_order:
+            articles.sort(key=lambda a: (
+                source_order.get(a.get("source_id"), len(source_order)),
+                order_map.get(a.get("id"), 10**9),
+            ))
 
         now=datetime.now(self.timezone); date_label=now.strftime("%-d %B %Y")
         book=epub.EpubBook(); book.set_identifier(f"tangthu-news-{now:%Y%m%d}"); book.set_title(f"{title} at {edition_time} — {date_label}"); book.set_language("vi"); book.add_author("Tàng Thư"); book.add_metadata("DC","publisher","Tàng Thư"); book.add_metadata("DC","description",f"{title} at {edition_time} — {date_label}")
