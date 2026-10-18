@@ -1,0 +1,38 @@
+id: cnn
+name: CNN
+url: https://www.cnn.com/
+status: active
+
+http:
+  headers:
+    Referer: https://www.cnn.com/
+
+# HTML-only discovery. No RSS/Atom/sitemap is used here.
+discovery:
+  - html
+
+html:
+  strategy: page_articles
+  max_articles: 20
+  article_link_selectors:
+    - 'a[href]'
+  # Current CNN article URLs are date-based and normally end in index.html.
+  # Keep this as a source rule instead of hard-coding CNN into the crawler.
+  article_href_regex: '^/\\d{4}/\\d{2}/\\d{2}/[^?#]+(?:/index\\.html)?$'
+
+extractor:
+  engine: newspaper4k
+
+quality_gate:
+  enabled: true
+  require_title: true
+  min_body_chars: 300
+  min_paragraphs: 2
+  reject_titles:
+    - Untitled
+    - Article
+
+# CNN is copyrighted. Keep the test edition to an excerpt unless full-text
+# redistribution is explicitly permitted/licensed.
+policy:
+  mode: excerpt
