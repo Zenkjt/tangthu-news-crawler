@@ -145,7 +145,7 @@ class ArticleSpider(scrapy.Spider):
             failure.value,
         )
 
-    def _allowed_domain(self, url: str, source_id: str) -> bool:
+    def _allowed_domain(self, url: str, source_id: str | None = None) -> bool:
         source = self.source_map.get(source_id, self.source) or {}
         configured = urlparse(source.get("url", "")).hostname
         actual = urlparse(url).hostname
