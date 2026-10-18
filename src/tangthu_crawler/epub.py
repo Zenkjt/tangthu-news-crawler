@@ -183,30 +183,30 @@ class EpubGenerator:
         # source jumps directly to the beginning of that source.
         native_toc = []
         current_source_id = None
-        current_group = []
+        current_source_link = None
+        current_articles = []
 
         for index, (article, chapter) in enumerate(
             zip(articles, article_chapters), start=1
         ):
             source_id = article.get("source_id")
             if source_id != current_source_id:
-                if current_group:
-                    native_toc.append(tuple(current_group))
-                    current_group = []
+                if current_source_link is not None:
+                    native_toc.append(
+                        (current_source_link, tuple(current_articles))
+                    )
 
                 source = source_map.get(source_id, {})
                 source_name = source.get("name") or source_id or "Nguồn khác"
-
-                current_group.append(
-                    epub.Link(
-                        chapter.file_name,
-                        source_name,
-                        f"source-{index}",
-                    )
+                current_source_link = epub.Link(
+                    chapter.file_name,
+                    source_name,
+                    f"source-{index}",
                 )
+                current_articles = []
                 current_source_id = source_id
 
-            current_group.append(
+            current_articles.append(
                 epub.Link(
                     chapter.file_name,
                     chapter.title or f"Article {index}",
@@ -214,8 +214,10 @@ class EpubGenerator:
                 )
             )
 
-        if current_group:
-            native_toc.append(tuple(current_group))
+        if current_source_link is not None:
+            native_toc.append(
+                (current_source_link, tuple(current_articles))
+            )
 
         book.toc = tuple(native_toc)
 
