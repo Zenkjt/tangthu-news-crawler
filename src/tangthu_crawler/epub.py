@@ -33,15 +33,15 @@ class EpubGenerator:
         image.save(
             output_path,
             format="JPEG",
-            quality=88,
+            quality=70,
             progressive=False,
-            optimize=False,
-            subsampling=0,
+            optimize=True,
+            subsampling=2,
         )
         return Path(output_path)
 
-    def generate(self, article_pool, output_path, sources, title="YOUR NEWS", edition_time="07:00", article_ids: set[str] | None = None):
-        pool=Path(article_pool); output=Path(output_path); source_map={s["id"]:s for s in sources}; allowed_ids=article_ids; articles=[]
+    def generate(self, article_pool, output_path, sources, title="YOUR NEWS", edition_time="07:00", article_ids: list[str] | set[str] | None = None):
+        pool=Path(article_pool); output=Path(output_path); source_map={s["id"]:s for s in sources}; allowed_ids=set(article_ids) if article_ids is not None else None; order_map={article_id: i for i, article_id in enumerate(article_ids)} if isinstance(article_ids, list) else {}; articles=[]
         for path in sorted(pool.glob("*/*.json")):
             if path.name.endswith(".meta.json"): continue
             article=json.loads(path.read_text(encoding="utf-8"))
@@ -49,7 +49,8 @@ class EpubGenerator:
             source=source_map.get(article.get("source_id"), {})
             if source.get("status", "active") != "active": continue
             articles.append(self._apply_policy(article, source.get("policy", {})))
-        articles.sort(key=lambda a:a.get("published_at") or "", reverse=True)
+        if order_map:
+            articles.sort(key=lambda a: order_map.get(a.get("id"), 10**9))
 
         now=datetime.now(self.timezone); date_label=now.strftime("%-d %B %Y")
         book=epub.EpubBook(); book.set_identifier(f"tangthu-news-{now:%Y%m%d}"); book.set_title(f"{title} at {edition_time} — {date_label}"); book.set_language("vi"); book.add_author("Tàng Thư"); book.add_metadata("DC","publisher","Tàng Thư"); book.add_metadata("DC","description",f"{title} at {edition_time} — {date_label}")

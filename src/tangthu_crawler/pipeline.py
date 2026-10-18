@@ -34,7 +34,7 @@ def run():
     output_dir = ROOT / settings.get("storage", {}).get("article_pool", "data/article_pool")
     pool = ArticlePool(output_dir)
     extractor = ArticleExtractor()
-    edition_article_ids = set()
+    edition_article_ids = []
     crawl_jobs = []
     discovered = {}
 
@@ -80,7 +80,8 @@ def run():
                 pool.write_article(article)
                 # Publication date is metadata only. Edition selection follows
                 # discovery order and the source limit; no date filtering.
-                edition_article_ids.add(item_id)
+                if item_id not in edition_article_ids:
+                    edition_article_ids.append(item_id)
                 kept += 1
             except Exception as exc:
                 print(f"{source['id']}: extraction failed {ref.url}: {type(exc).__name__}: {exc!r}")
