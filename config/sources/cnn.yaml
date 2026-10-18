@@ -12,13 +12,9 @@ discovery:
   - html
 
 html:
-  strategy: page_articles
+  strategy: generic
   max_articles: 20
-  article_link_selectors:
-    - 'a[href]'
-  # Current CNN article URLs are date-based and normally end in index.html.
-  # Keep this as a source rule instead of hard-coding CNN into the crawler.
-  article_href_regex: '^/\\d{4}/\\d{2}/\\d{2}/[^?#]+(?:/index\\.html)?$'
+  min_link_score: 4
 
 extractor:
   engine: newspaper4k

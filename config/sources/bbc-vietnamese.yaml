@@ -1,0 +1,32 @@
+id: bbc-vietnamese
+name: BBC Tiếng Việt
+url: https://www.bbc.com/vietnamese/topics/cnlv9j1ekq0t
+status: active
+
+http:
+  headers:
+    Referer: https://www.bbc.com/vietnamese/
+
+discovery:
+  - html
+
+html:
+  strategy: generic
+  max_articles: 20
+  min_link_score: 4
+
+extractor:
+  engine: newspaper4k
+
+quality_gate:
+  enabled: true
+  require_title: true
+  min_body_chars: 300
+  min_paragraphs: 2
+  reject_titles:
+    - Untitled
+    - Article
+
+# BBC content is copyrighted: test edition keeps an excerpt only.
+policy:
+  mode: excerpt
