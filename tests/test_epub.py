@@ -58,7 +58,10 @@ def test_generated_epub_passes_structural_validation(tmp_path: Path):
         assert "Fixture News" in toc
         assert "Test Article one" in toc
         assert "article-1.xhtml" in toc
-        assert "toc.xhtml" in nav
+        # Native EPUB navigation is intentionally flat and points directly
+        # to articles; toc.xhtml remains the reader-facing HTML TOC only.
+        assert "article-1.xhtml" in nav
+        assert "toc.xhtml" not in nav
 
 
 def test_validator_rejects_broken_epub(tmp_path: Path):
