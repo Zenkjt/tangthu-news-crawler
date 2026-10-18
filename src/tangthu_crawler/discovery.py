@@ -98,6 +98,20 @@ class SourceDiscovery:
                     print(f"{self.source.get('id','source')}: page={page_url} article_links={len(links)} max={limit}")
                     return links
 
+        # Strict selector-first mode: only a narrow article-URL regex fallback.
+        # Never use generic link scoring here, which can capture author/category links.
+        if not links:
+            for a in soup.find_all("a", href=True):
+                url = self._canonicalize(urljoin(page_url, a["href"]))
+                if not url or url in seen or not self._is_article_url(url):
+                    continue
+                if not self.ARTICLE_HREF_RE.search(urlparse(url).path):
+                    continue
+                seen.add(url)
+                links.append(url)
+                if len(links) >= limit:
+                    break
+
         print(f"{self.source.get('id','source')}: page={page_url} article_links={len(links)} max={limit}")
         return links
 
