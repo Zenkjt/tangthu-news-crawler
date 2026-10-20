@@ -10,4 +10,13 @@ crawler:
   retry_times: 2
 storage:
   article_pool: data/article_pool
+  article_cache: data/article_cache
+  edition_pool: data/edition_pool
   editions: data/editions
+news:
+  config_url: https://tangthu-news-worker.mienluonngon.workers.dev/news/config
+edition:
+  title: YOUR NEWS
+  time: "07:00"
+drive_upload:
+  filename: 0neNews.epub
