@@ -14,6 +14,9 @@ on:
         description: "Required for on-demand mode (for example g-f5a27f2a7738)"
         required: false
         type: string
+  repository_dispatch:
+    types:
+      - news-subscription-changed
   schedule:
     - cron: "45 23 * * *"
 
@@ -45,8 +48,8 @@ jobs:
       - name: Run planner and crawler
         run: python -m tangthu_crawler
         env:
-          TANGTHU_CRAWL_MODE: ${{ github.event_name == 'schedule' && 'daily' || inputs.mode || 'daily' }}
-          TANGTHU_BRANCH_ID: ${{ inputs.branch_id }}
+          TANGTHU_CRAWL_MODE: ${{ github.event_name == 'schedule' && 'daily' || github.event_name == 'repository_dispatch' && 'on-demand' || inputs.mode || 'daily' }}
+          TANGTHU_BRANCH_ID: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.branch_id || inputs.branch_id }}
           TANGTHU_NEWS_CONFIG_URL: ${{ vars.TANGTHU_NEWS_CONFIG_URL }}
           TANGTHU_APPS_SCRIPT_URL: ${{ vars.TANGTHU_APPS_SCRIPT_URL }}
           TANGTHU_UPLOAD_TOKEN: ${{ secrets.TANGTHU_UPLOAD_TOKEN }}
