@@ -1,21 +1,67 @@
 name: Tang Thu News Crawler
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Daily refresh or build one changed shelf"
+        required: true
+        default: daily
+        type: choice
+        options:
+          - daily
+          - on-demand
+      branch_id:
+        description: "Required for on-demand mode (for example g-f5a27f2a7738)"
+        required: false
+        type: string
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "45 23 * * *"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tangthu-news-crawler-main
+  cancel-in-progress: false
+
 jobs:
   crawler:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
       - run: pip install -e ".[dev]"
-      - run: python -m tangthu_crawler
+
+      - name: Run tests before crawling
+        run: pytest
+
+      - name: Run planner and crawler
+        run: python -m tangthu_crawler
         env:
+          TANGTHU_CRAWL_MODE: ${{ github.event_name == 'schedule' && 'daily' || inputs.mode || 'daily' }}
+          TANGTHU_BRANCH_ID: ${{ inputs.branch_id }}
+          TANGTHU_NEWS_CONFIG_URL: ${{ vars.TANGTHU_NEWS_CONFIG_URL }}
           TANGTHU_APPS_SCRIPT_URL: ${{ vars.TANGTHU_APPS_SCRIPT_URL }}
           TANGTHU_UPLOAD_TOKEN: ${{ secrets.TANGTHU_UPLOAD_TOKEN }}
           TANGTHU_NEWS_DRIVE_FOLDER_ID: ${{ vars.TANGTHU_NEWS_DRIVE_FOLDER_ID }}
           TANGTHU_UPLOAD_ENABLED: ${{ vars.TANGTHU_UPLOAD_ENABLED || 'false' }}
-      - run: pytest
+
+      - name: Persist ArticleCache
+        if: success()
+        run: |
+          if [ -d data/article_cache ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add data/article_cache
+            if ! git diff --cached --quiet; then
+              git commit -m "news: update ArticleCache"
+              git push origin HEAD:main
+            fi
+          fi
