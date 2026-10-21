@@ -1,9 +1,1 @@
-[
-  "tests/test_article_cache.py::test_cleanup_removes_only_expired_records",
-  "tests/test_article_cache.py::test_exact_five_day_lifetime",
-  "tests/test_article_cache.py::test_images_mode_requires_cached_images",
-  "tests/test_article_cache.py::test_refresh_resets_five_day_clock",
-  "tests/test_article_cache.py::test_same_source_and_url_updates_existing_record",
-  "tests/test_article_cache.py::test_same_url_different_sources_are_separate",
-  "tests/test_article_cache.py::test_upsert_and_get"
-]
+[]
