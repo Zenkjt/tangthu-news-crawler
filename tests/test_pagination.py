@@ -11,6 +11,13 @@ def test_pagination_identity_for_vhnt_style_urls():
     assert ArticleSpider._same_article(page2, root)
     assert ArticleSpider._page_number(page2, root) == 2
 
+    page0 = "https://vanhoanghethuat.vn/nhung-net-77763236-page0.html"
+    page1 = "https://vanhoanghethuat.vn/nhung-net-77763236-page1.html"
+    assert ArticleSpider._same_article(page0, root)
+    assert ArticleSpider._same_article(page1, root)
+    assert ArticleSpider._page_number(page0, root) == 0
+    assert ArticleSpider._page_number(page1, root) == 1
+
 
 def test_pagination_identity_for_query_and_numeric_urls():
     root = "https://example.com/story-123.html"

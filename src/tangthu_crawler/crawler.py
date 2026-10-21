@@ -229,7 +229,14 @@ class ArticleSpider(scrapy.Spider):
                 continue
 
             candidate_page = self._page_number(candidate, root_url)
-            if candidate_page is not None and candidate_page <= page_index:
+            # Do not assume that page1 is the first page.  Some sites use:
+            #   article.html       -> first page
+            #   article-page0.html
+            #   article-page1.html
+            # and so on.  A numeric pagination URL is therefore a valid
+            # continuation regardless of its number.  The current response
+            # URL and the root URL are excluded to prevent cycles.
+            if candidate.rstrip("#") == root_url.rstrip("#"):
                 continue
 
             rel = {str(value).casefold() for value in anchor.get("rel", [])}
@@ -252,6 +259,37 @@ class ArticleSpider(scrapy.Spider):
 
         if not candidates:
             return None
+
+        current_page = self._page_number(response.url, root_url)
+        if current_page is None:
+            # The root article URL is the physical first page, but it has no
+            # numeric suffix. Treat it as -1 so page0 remains a valid
+            # continuation candidate.
+            current_page = -1
+
+        # Prefer an explicit next link first. Otherwise walk numeric pages in
+        # ascending order, allowing page0/page1/... regardless of the site's
+        # numbering convention. If no numeric candidate is available, fall
+        # back to the scored candidate.
+        next_candidates = [item for item in candidates if item[0] >= 10]
+        if next_candidates:
+            next_candidates.sort(reverse=True)
+            return next_candidates[0][2]
+
+        numeric_candidates = [
+            item for item in candidates
+            if self._page_number(item[2], root_url) is not None
+            and self._page_number(item[2], root_url) != current_page
+        ]
+        if numeric_candidates:
+            numeric_candidates.sort(
+                key=lambda item: (
+                    self._page_number(item[2], root_url),
+                    -item[0],
+                    item[1],
+                )
+            )
+            return numeric_candidates[0][2]
 
         candidates.sort(reverse=True)
         return candidates[0][2]
