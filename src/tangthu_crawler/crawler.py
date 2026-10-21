@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import scrapy
+from bs4 import BeautifulSoup
 from scrapy.crawler import CrawlerProcess
 
 from .models import ArticleRef
@@ -25,6 +27,16 @@ DEFAULT_REQUEST_HEADERS = {
     "Connection": "keep-alive",
     "Upgrade-Insecure-Requests": "1",
 }
+
+PAGINATION_HREF_RE = re.compile(
+    r"(?:[?&](?:page|p)=\d+|[-_/](?:page|p)[-_]?\d+(?:\D|$)|/(?:\d+)(?:$|[?#]))",
+    re.I,
+)
+PAGINATION_TEXT_RE = re.compile(
+    r"^(?:next|next page|trang\s+\d+|\d+|›|»|→|>)$",
+    re.I,
+)
+PAGINATION_WORD_RE = re.compile(r"\b(?:next|trang)\b", re.I)
 
 
 def article_id(url: str) -> str:
@@ -95,32 +107,50 @@ class ArticleSpider(scrapy.Spider):
                 callback=self.parse_article,
                 errback=self.handle_error,
                 headers=headers,
-                meta={"source_id": ref.source_id, "article_url": ref.url},
+                meta={
+                    "source_id": ref.source_id,
+                    "article_url": ref.url,
+                    "root_url": ref.url,
+                    "root_id": article_id(ref.url),
+                    "page_index": 1,
+                },
                 dont_filter=False,
             )
 
     def parse_article(self, response):
         url = response.meta["article_url"]
+        root_url = response.meta["root_url"]
         source_id = response.meta["source_id"]
+        root_id = response.meta["root_id"]
+        page_index = int(response.meta.get("page_index", 1))
 
         if not self._allowed_domain(response.url, source_id):
             self.logger.warning("Skipped off-domain URL: %s", response.url)
             return
 
-        item_id = article_id(url)
         target_dir = self.output_dir / source_id
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        html_path = target_dir / f"{item_id}.html"
-        meta_path = target_dir / f"{item_id}.meta.json"
+        # A recrawl of page 1 must invalidate stale continuation pages.
+        # Otherwise an old page2 can be accidentally merged into a new article.
+        if page_index == 1:
+            for stale in target_dir.glob(f"{root_id}.page*.html"):
+                stale.unlink(missing_ok=True)
+            for stale in target_dir.glob(f"{root_id}.page*.meta.json"):
+                stale.unlink(missing_ok=True)
+
+        suffix = "" if page_index == 1 else f".page{page_index}"
+        html_path = target_dir / f"{root_id}{suffix}.html"
+        meta_path = target_dir / f"{root_id}{suffix}.meta.json"
 
         html_path.write_bytes(response.body)
 
         metadata = {
-            "id": item_id,
+            "id": root_id,
             "source_id": source_id,
-            "url": url,
-            "fetched_url": response.url,
+            "url": root_url,
+            "page_url": response.url,
+            "page_index": page_index,
             "status": response.status,
             "content_type": response.headers.get(
                 b"Content-Type", b""
@@ -135,6 +165,38 @@ class ArticleSpider(scrapy.Spider):
 
         yield metadata
 
+        pagination = self._pagination_config(source_id)
+        max_pages = max(1, int(pagination.get("max_pages", 5)))
+        if pagination.get("enabled", True) is False or page_index >= max_pages:
+            return
+
+        next_url = self._find_next_page(
+            response,
+            root_url=root_url,
+            page_index=page_index,
+        )
+        if not next_url:
+            return
+
+        yield scrapy.Request(
+            next_url,
+            callback=self.parse_article,
+            errback=self.handle_error,
+            headers=dict(
+                (self.source_map.get(source_id, self.source) or {})
+                .get("http", {})
+                .get("headers", {})
+            ),
+            meta={
+                "source_id": source_id,
+                "article_url": root_url,
+                "root_url": root_url,
+                "root_id": root_id,
+                "page_index": page_index + 1,
+            },
+            dont_filter=False,
+        )
+
     def handle_error(self, failure):
         request = failure.request
         self.logger.warning(
@@ -144,6 +206,137 @@ class ArticleSpider(scrapy.Spider):
             type(failure.value).__name__,
             failure.value,
         )
+
+    def _pagination_config(self, source_id: str) -> dict:
+        source = self.source_map.get(source_id, self.source) or {}
+        return source.get("pagination", {})
+
+    def _find_next_page(self, response, *, root_url: str, page_index: int) -> str | None:
+        soup = BeautifulSoup(response.text, "html.parser")
+        candidates = []
+
+        for position, anchor in enumerate(soup.find_all("a", href=True)):
+            href = anchor.get("href", "").strip()
+            if not href:
+                continue
+
+            candidate = urljoin(response.url, href)
+            if not self._same_domain(candidate, root_url):
+                continue
+            if candidate.rstrip("#") == response.url.rstrip("#"):
+                continue
+            if not self._same_article(candidate, root_url):
+                continue
+
+            candidate_page = self._page_number(candidate, root_url)
+            if candidate_page is not None and candidate_page <= page_index:
+                continue
+
+            rel = {str(value).casefold() for value in anchor.get("rel", [])}
+            text = " ".join(anchor.stripped_strings)
+
+            score = 0
+            if "next" in rel:
+                score += 10
+            if PAGINATION_TEXT_RE.match(text):
+                score += 7
+            if PAGINATION_WORD_RE.search(text):
+                score += 5
+            if PAGINATION_HREF_RE.search(candidate):
+                score += 6
+            if anchor.find_parent(["article", "main"]):
+                score += 2
+
+            if score:
+                candidates.append((score, -position, candidate))
+
+        if not candidates:
+            return None
+
+        candidates.sort(reverse=True)
+        return candidates[0][2]
+
+    @staticmethod
+    def _same_domain(candidate: str, root_url: str) -> bool:
+        root_host = (urlparse(root_url).hostname or "").lower()
+        host = (urlparse(candidate).hostname or "").lower()
+        return bool(
+            root_host
+            and host
+            and (host == root_host or host.endswith("." + root_host))
+        )
+
+    @staticmethod
+    def _article_identity(url: str) -> str:
+        parsed = urlparse(url)
+        path = parsed.path.rstrip("/").lower()
+        extension = ""
+        if path.endswith(".html"):
+            path = path[:-5]
+            extension = ".html"
+        path = re.sub(r"[-_/](?:page|p)[-_]?\d+$", "", path)
+        path = re.sub(r"/\d+$", "", path)
+        return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}{path}{extension}"
+
+    @classmethod
+    def _same_article(cls, candidate: str, root_url: str) -> bool:
+        if cls._article_identity(candidate) == cls._article_identity(root_url):
+            return True
+
+        root = urlparse(root_url)
+        other = urlparse(candidate)
+        root_path = root.path.rstrip("/").lower()
+        other_path = other.path.rstrip("/").lower()
+
+        if root_path.endswith(".html"):
+            root_path = root_path[:-5]
+        if other_path.endswith(".html"):
+            other_path = other_path[:-5]
+
+        if other_path.startswith(root_path + "/"):
+            suffix = other_path[len(root_path) + 1:]
+            return suffix.isdigit()
+
+        if other_path.startswith(root_path + "-") or other_path.startswith(root_path + "_"):
+            suffix = other_path[len(root_path) + 1:]
+            return suffix.isdigit()
+
+        return False
+
+    @staticmethod
+    def _page_number(url: str, root_url: str) -> int | None:
+        parsed = urlparse(url)
+        query_match = re.search(
+            r"(?:^|&)(?:page|p)=(\d+)(?:&|$)",
+            parsed.query,
+            re.I,
+        )
+        if query_match:
+            return int(query_match.group(1))
+
+        path = parsed.path.rstrip("/").lower()
+        match = re.search(
+            r"(?:[-_/](?:page|p)[-_]?/?|/)(\d+)(?:\.html)?$",
+            path,
+            re.I,
+        )
+        if match:
+            return int(match.group(1))
+
+        root = urlparse(root_url)
+        root_path = root.path.rstrip("/").lower()
+        if root_path.endswith(".html"):
+            root_path = root_path[:-5]
+        candidate_path = path[:-5] if path.endswith(".html") else path
+
+        for separator in ("-", "_", "/"):
+            prefix = root_path + separator
+            if candidate_path.startswith(prefix):
+                suffix = candidate_path[len(prefix):]
+                if suffix.isdigit():
+                    return int(suffix)
+
+        return None
 
     def _allowed_domain(self, url: str, source_id: str | None = None) -> bool:
         source = self.source_map.get(source_id, self.source) or {}

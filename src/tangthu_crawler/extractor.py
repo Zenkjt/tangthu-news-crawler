@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import re
 from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
@@ -15,12 +17,115 @@ class ArticleExtractor:
 
     def extract(self, html_path: str | Path, url: str, source: dict | None = None) -> dict:
         path = Path(html_path)
-        html = path.read_text(encoding="utf-8", errors="replace")
-        engine = (source or {}).get("extractor", {}).get("engine", "trafilatura")
+        pages = self._page_paths(path)
 
+        if len(pages) > 1:
+            return self._extract_paginated(pages, url, source)
+
+        html = path.read_text(encoding="utf-8", errors="replace")
+        return self._extract_single(html, url, source)
+
+    def _extract_single(self, html: str, url: str, source: dict | None = None) -> dict:
+        engine = (source or {}).get("extractor", {}).get("engine", "trafilatura")
         if engine == "vnexpress":
             return self._extract_vnexpress(html, url)
         return self._extract_trafilatura(html, url)
+
+    @staticmethod
+    def _page_paths(path: Path) -> list[Path]:
+        pages = [path]
+        pattern = f"{path.stem}.page*.html"
+        extras = sorted(
+            path.parent.glob(pattern),
+            key=ArticleExtractor._page_number,
+        )
+        return pages + [item for item in extras if item != path]
+
+    @staticmethod
+    def _page_number(path: Path) -> int:
+        match = re.search(r"\.page(\d+)\.html$", path.name, re.I)
+        return int(match.group(1)) if match else 1
+
+    def _extract_paginated(
+        self,
+        pages: list[Path],
+        url: str,
+        source: dict | None = None,
+    ) -> dict:
+        articles = []
+
+        for page in pages:
+            page_html = page.read_text(encoding="utf-8", errors="replace")
+            page_url = self._page_url(page, url)
+
+            try:
+                article = self._extract_single(page_html, page_url, source)
+            except Exception as exc:
+                print(
+                    f"pagination: extraction failed {page}: "
+                    f"{type(exc).__name__}: {exc}"
+                )
+                continue
+
+            if article.get("body"):
+                articles.append(article)
+
+        if not articles:
+            return self._extract_single(
+                pages[0].read_text(encoding="utf-8", errors="replace"),
+                url,
+                source,
+            )
+
+        first = dict(articles[0])
+        first["url"] = url
+        first["canonical_url"] = articles[0].get("canonical_url") or url
+        first["body"] = self._merge_page_bodies(
+            [article.get("body", "") for article in articles]
+        )
+
+        for key in ("title", "author", "published_at", "image"):
+            if not first.get(key):
+                for article in articles[1:]:
+                    if article.get(key):
+                        first[key] = article[key]
+                        break
+
+        return first
+
+    @staticmethod
+    def _page_url(path: Path, fallback: str) -> str:
+        meta_path = path.with_suffix(".meta.json")
+        if not meta_path.exists():
+            return fallback
+
+        try:
+            metadata = json.loads(
+                meta_path.read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError):
+            return fallback
+
+        return metadata.get("page_url") or fallback
+
+    @staticmethod
+    def _merge_page_bodies(bodies: list[str]) -> str:
+        merged = []
+        recent = set()
+
+        for body in bodies:
+            for paragraph in ArticleExtractor._paragraphs(body):
+                normalized = " ".join(paragraph.split()).casefold()
+                if not normalized or normalized in recent:
+                    continue
+
+                merged.append(paragraph.strip())
+                recent.add(normalized)
+
+                if len(recent) > 24:
+                    recent.pop()
+
+        return "\n\n".join(merged).strip()
 
     @staticmethod
     def _clean_text(value: str | None) -> str:
@@ -136,25 +241,48 @@ class ArticleExtractor:
                 if id(node) in seen:
                     continue
                 seen.add(id(node))
-                paragraphs = [self._clean_text(p.get_text(" ", strip=True)) for p in node.select("p")]
+                paragraphs = [
+                    self._clean_text(p.get_text(" ", strip=True))
+                    for p in node.select("p")
+                ]
                 paragraphs = [p for p in paragraphs if p]
                 text = "\n\n".join(dict.fromkeys(paragraphs))
+
                 if len(text) >= 300:
-                    link_text = self._clean_text(" ".join(a.get_text(" ", strip=True) for a in node.select("a")))
+                    link_text = self._clean_text(
+                        " ".join(
+                            a.get_text(" ", strip=True)
+                            for a in node.select("a")
+                        )
+                    )
                     link_ratio = len(link_text) / len(text) if text else 1
-                    score = min(len(text), 12000) / 100 + min(len(paragraphs), 40) * 2 - link_ratio * 20
+                    score = (
+                        min(len(text), 12000) / 100
+                        + min(len(paragraphs), 40) * 2
+                        - link_ratio * 20
+                    )
                     candidates.append((score, text))
 
         body = max(candidates, key=lambda x: x[0])[1] if candidates else ""
-        title_node = soup.select_one('meta[property="og:title"]') or soup.select_one("h1")
+        title_node = (
+            soup.select_one('meta[property="og:title"]')
+            or soup.select_one("h1")
+        )
         title = (
-            title_node.get("content") if title_node.name == "meta" else title_node.get_text(" ", strip=True)
+            title_node.get("content")
+            if title_node.name == "meta"
+            else title_node.get_text(" ", strip=True)
         ) if title_node else ""
+
         canonical = self._canonical_from_html(html, url)
         published = None
-        node = soup.select_one('meta[property="article:published_time"], meta[name="date"], time[datetime]')
+        node = soup.select_one(
+            'meta[property="article:published_time"], '
+            'meta[name="date"], time[datetime]'
+        )
         if node:
             published = node.get("content") or node.get("datetime")
+
         return {
             "url": url,
             "canonical_url": canonical,
@@ -176,7 +304,9 @@ class ArticleExtractor:
     @staticmethod
     def _image_from_html(html: str, base_url: str) -> str | None:
         soup = BeautifulSoup(html, "html.parser")
-        node = soup.select_one('meta[property="og:image"], meta[name="twitter:image"]')
+        node = soup.select_one(
+            'meta[property="og:image"], meta[name="twitter:image"]'
+        )
         if node and node.get("content"):
             return urljoin(base_url, node["content"])
         return None
@@ -191,69 +321,125 @@ class ArticleExtractor:
         )
         candidates = []
         seen_nodes = set()
+
         for selector in selectors:
             for candidate in soup.select(selector):
                 marker = id(candidate)
                 if marker in seen_nodes:
                     continue
                 seen_nodes.add(marker)
+
                 paragraph_count = len(candidate.select("p"))
-                text = self._clean_text(" ".join(candidate.stripped_strings))
+                text = self._clean_text(
+                    " ".join(candidate.stripped_strings)
+                )
                 text_length = len(text)
+
                 if paragraph_count < 2 and text_length < 300:
                     continue
-                link_text = self._clean_text(" ".join(" ".join(node.stripped_strings) for node in candidate.select("a")))
-                link_ratio = len(link_text) / text_length if text_length else 1.0
-                score = min(text_length, 12000) / 100 + min(paragraph_count, 40) * 2 - link_ratio * 20
+
+                link_text = self._clean_text(
+                    " ".join(
+                        " ".join(node.stripped_strings)
+                        for node in candidate.select("a")
+                    )
+                )
+                link_ratio = (
+                    len(link_text) / text_length
+                    if text_length
+                    else 1.0
+                )
+                score = (
+                    min(text_length, 12000) / 100
+                    + min(paragraph_count, 40) * 2
+                    - link_ratio * 20
+                )
                 candidates.append((score, candidate))
 
         if not candidates:
             raise ValueError("VnExpress article body container not found")
+
         _, container = max(candidates, key=lambda item: item[0])
 
-        for node in container.select("script, style, noscript, nav, form"):
+        for node in container.select(
+            "script, style, noscript, nav, form"
+        ):
             node.decompose()
 
         blocks = []
         seen = set()
-        for node in container.select("p, h2, h3, blockquote, figcaption"):
-            value = self._clean_text(" ".join(node.stripped_strings))
+
+        for node in container.select(
+            "p, h2, h3, blockquote, figcaption"
+        ):
+            value = self._clean_text(
+                " ".join(node.stripped_strings)
+            )
             if not value or value in seen:
                 continue
             seen.add(value)
             blocks.append(value)
+
         body = "\n\n".join(blocks).strip()
+
         if not body:
-            body = self._clean_text(" ".join(container.stripped_strings))
+            body = self._clean_text(
+                " ".join(container.stripped_strings)
+            )
         if not body:
             raise ValueError("VnExpress article body is empty")
 
         title_node = soup.select_one("h1.title-detail, h1")
-        title = self._clean_text(title_node.get_text(" ", strip=True)) if title_node else ""
+        title = (
+            self._clean_text(title_node.get_text(" ", strip=True))
+            if title_node
+            else ""
+        )
 
-        description_node = soup.select_one("p.description, .description")
-        description = self._clean_text(description_node.get_text(" ", strip=True)) if description_node else ""
+        description_node = soup.select_one(
+            "p.description, .description"
+        )
+        description = (
+            self._clean_text(
+                description_node.get_text(" ", strip=True)
+            )
+            if description_node
+            else ""
+        )
         if description and description not in body:
             body = f"{description}\n\n{body}"
 
         date_node = soup.select_one("span.date, .date")
-        published_at = self._parse_vnexpress_date(date_node.get_text(" ", strip=True) if date_node else "")
+        published_at = self._parse_vnexpress_date(
+            date_node.get_text(" ", strip=True)
+            if date_node
+            else ""
+        )
 
         author = None
         for selector in (".author_mail", ".author", ".Normal strong"):
             node = soup.select_one(selector)
             if node:
-                value = self._clean_text(node.get_text(" ", strip=True))
+                value = self._clean_text(
+                    node.get_text(" ", strip=True)
+                )
                 if value and len(value) <= 120:
                     author = value
                     break
 
         image = None
-        image_node = container.select_one("img[data-src], img[data-original], img[src]")
+        image_node = container.select_one(
+            "img[data-src], img[data-original], img[src]"
+        )
         if image_node:
-            image = image_node.get("data-src") or image_node.get("data-original") or image_node.get("src")
+            image = (
+                image_node.get("data-src")
+                or image_node.get("data-original")
+                or image_node.get("src")
+            )
             if image:
                 image = urljoin(url, image)
+
         image = image or self._image_from_html(html, url)
 
         canonical = soup.select_one('link[rel="canonical"]')
@@ -261,8 +447,13 @@ class ArticleExtractor:
         canonical_url = urljoin(url, canonical_url)
 
         return {
-            "url": url, "canonical_url": canonical_url, "title": title.strip(),
-            "author": author, "published_at": published_at, "body": body, "image": image,
+            "url": url,
+            "canonical_url": canonical_url,
+            "title": title.strip(),
+            "author": author,
+            "published_at": published_at,
+            "body": body,
+            "image": image,
         }
 
     @staticmethod
@@ -271,30 +462,46 @@ class ArticleExtractor:
         cfg = (source or {}).get("quality_gate", {})
         if not cfg.get("enabled", False):
             return True, ""
+
         title = (article.get("title") or "").strip()
         body = (article.get("body") or "").strip()
+
         if cfg.get("require_title", True) and not title:
             return False, "missing_title"
-        reject_titles = {str(x).strip().casefold() for x in cfg.get("reject_titles", [])}
+
+        reject_titles = {
+            str(x).strip().casefold()
+            for x in cfg.get("reject_titles", [])
+        }
         if title.casefold() in reject_titles:
             return False, "generic_title"
+
         min_chars = int(cfg.get("min_body_chars", 300))
         if len(body) < min_chars:
             return False, "body_too_short"
+
         min_paragraphs = int(cfg.get("min_paragraphs", 2))
         if len(ArticleExtractor._paragraphs(body)) < min_paragraphs:
             return False, "too_few_paragraphs"
+
         return True, ""
 
     @staticmethod
     def _parse_vnexpress_date(value: str) -> str | None:
         if not value:
             return None
-        for fmt in ("%d/%m/%Y, %H:%M (GMT+7)", "%d/%m/%Y, %H:%M"):
+
+        for fmt in (
+            "%d/%m/%Y, %H:%M (GMT+7)",
+            "%d/%m/%Y, %H:%M",
+        ):
             try:
-                return datetime.strptime(value, fmt).replace(tzinfo=timezone(timedelta(hours=7))).isoformat()
+                return datetime.strptime(value, fmt).replace(
+                    tzinfo=timezone(timedelta(hours=7))
+                ).isoformat()
             except ValueError:
                 pass
+
         return None
 
     @staticmethod
