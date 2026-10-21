@@ -238,7 +238,7 @@ class EpubGenerator:
         if mode == "metadata_only":
             result["body"] = ""
         elif mode == "excerpt":
-            result["body"] = body[:800].strip()
+            result["body"] = body
         elif mode in {"full_article", "licensed"}:
             result["body"] = body
         else:
