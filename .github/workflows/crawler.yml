@@ -18,8 +18,7 @@ on:
   repository_dispatch:
     types:
       - news-subscription-changed
-  schedule:
-    - cron: "30 1 * * *"
+      - news-daily
 
 permissions:
   contents: write
@@ -45,7 +44,7 @@ jobs:
       - name: Run planner and crawler
         run: python -m tangthu_crawler
         env:
-          TANGTHU_CRAWL_MODE: ${{ github.event_name == 'schedule' && 'daily' || github.event_name == 'repository_dispatch' && 'on-demand' || inputs.mode || 'daily' }}
+          TANGTHU_CRAWL_MODE: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.mode || inputs.mode || 'daily' }}
           TANGTHU_BRANCH_ID: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.branch_id || inputs.branch_id }}
           TANGTHU_NEWS_CONFIG_URL: ${{ vars.TANGTHU_NEWS_CONFIG_URL }}
           TANGTHU_APPS_SCRIPT_URL: ${{ vars.TANGTHU_APPS_SCRIPT_URL }}
