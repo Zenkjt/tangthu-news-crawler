@@ -26,7 +26,7 @@ def test_same_source_and_url_updates_existing_record(tmp_path: Path):
     updated = article("s1", "https://example.com/a")
     updated["title"] = "Updated"
     cache.upsert(updated)
-    records = cache.all_records("s1")
+    records = cache.all_records("s1", now="2026-10-20T12:00:00Z")
     assert len(records) == 1 and records[0]["title"] == "Updated"
 
 
@@ -34,8 +34,8 @@ def test_same_url_different_sources_are_separate(tmp_path: Path):
     cache = ArticleCache(tmp_path / "article_cache")
     cache.upsert(article("s1", "https://example.com/a"))
     cache.upsert(article("s2", "https://example.com/a"))
-    assert len(cache.all_records("s1")) == 1
-    assert len(cache.all_records("s2")) == 1
+    assert len(cache.all_records("s1", now="2026-10-20T12:00:00Z")) == 1
+    assert len(cache.all_records("s2", now="2026-10-20T12:00:00Z")) == 1
 
 
 def test_exact_five_day_lifetime(tmp_path: Path):
