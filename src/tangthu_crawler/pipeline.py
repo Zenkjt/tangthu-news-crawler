@@ -90,8 +90,9 @@ def _resolve_sources(
         try:
             by_url[_canonical_url(local["url"])] = local
             host = (urlparse(local["url"]).hostname or "").lower()
+            host = host.removeprefix("www.")
             if host:
-                by_host.setdefault(host, local)
+            by_host.setdefault(host, local)
         except (KeyError, ValueError):
             continue
 
