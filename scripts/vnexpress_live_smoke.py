@@ -25,6 +25,7 @@ DEFAULT_HEADERS = {
     "Accept-Language": "vi,en-US;q=0.8,en;q=0.6",
     "Referer": "https://vnexpress.net/",
 }
+
 CONTAINER_SELECTOR = "#paging, #list-news, .list-article"
 
 SOURCE_BASE = {
@@ -62,59 +63,69 @@ SOURCE_BASE = {
 
 def valid_topic_url(value: str) -> bool:
     parsed = urlparse(value)
-    return parsed.scheme in {"http", "https"} and parsed.hostname in {
-        "vnexpress.net", "www.vnexpress.net"
-    }
-
-
-def _inspect_cards(selector: str, node) -> None:
-    cards = node.select("article")
-    print(
-        f"DIAG_CONTAINER selector={selector} tag={node.name} "
-        f"class={node.get('class', [])} article_cards={len(cards)}"
+    return (
+        parsed.scheme in {"http", "https"}
+        and parsed.hostname in {"vnexpress.net", "www.vnexpress.net"}
     )
-    for index, card in enumerate(cards[:8], start=1):
-        print(
-            f"DIAG_CARD[{selector}][{index}] "
-            f"tag={card.name} class={card.get('class', [])}"
-        )
-        anchors = card.select("a[href]")
-        for a_index, anchor in enumerate(anchors[:6], start=1):
-            print(
-                f"DIAG_ANCHOR[{index}][{a_index}] "
-                f"tag={anchor.name} class={anchor.get('class', [])} "
-                f"title={json.dumps(anchor.get_text(' ', strip=True), ensure_ascii=False)} "
-                f"href={anchor.get('href', '')}"
-            )
-        print(
-            f"DIAG_ARTICLE_HTML[{index}]="
-            f"{json.dumps(str(card)[:3000], ensure_ascii=False)}"
-        )
 
 
 def _print_page_diagnostics(response: requests.Response) -> None:
     soup = BeautifulSoup(response.text, "html.parser")
     title = soup.title.get_text(" ", strip=True) if soup.title else "(no title)"
+    content_type = response.headers.get("Content-Type", "(unknown)")
     print(f"DIAG_HTTP_STATUS={response.status_code}")
     print(f"DIAG_FINAL_URL={response.url}")
-    print(f"DIAG_CONTENT_TYPE={response.headers.get('Content-Type', '(unknown)')}")
+    print(f"DIAG_CONTENT_TYPE={content_type}")
     print(f"DIAG_HTML_BYTES={len(response.content)}")
     print(f"DIAG_TITLE={json.dumps(title, ensure_ascii=False)}")
 
-    for selector in ("#paging", "#list-news", ".list-article"):
+    selectors = ("#paging", "#list-news", ".list-article")
+    found = []
+    for selector in selectors:
         node = soup.select_one(selector)
         if node:
-            _inspect_cards(selector, node)
+            found.append(selector)
+            cards = node.select("article")
+            print(
+                f"DIAG_CONTAINER selector={selector} tag={node.name} "
+                f"class={node.get('class', [])} article_cards={len(cards)}"
+            )
+            for index, card in enumerate(cards[:8], start=1):
+                anchor = card.select_one(
+                    "h3.title-news a, h2.title-news a, a[href$='.html']"
+                )
+                if anchor:
+                    print(
+                        f"DIAG_CARD[{selector}][{index}] "
+                        f"title={json.dumps(anchor.get_text(' ', strip=True), ensure_ascii=False)} "
+                        f"href={anchor.get('href', '')}"
+                    )
         else:
             print(f"DIAG_CONTAINER selector={selector} NOT_FOUND")
 
-    # Report exact matches for the current configured selectors.
-    for selector in (
-        "article.item-news h3.title-news a",
-        "article.item-news h2.title-news a",
-        ".list-article a[href]",
-    ):
-        print(f"DIAG_SELECTOR_MATCHES {selector}={len(soup.select(selector))}")
+    if found:
+        return
+
+    print("DIAG_CONTAINER_CANDIDATES_BEGIN")
+    candidates = soup.find_all(
+        lambda tag: tag.name in {"div", "section", "main"}
+        and (
+            any(word in str(tag.get("id", "")).lower()
+                for word in ("list", "news", "paging", "stream", "article"))
+            or any(word in " ".join(tag.get("class", [])).lower()
+                   for word in ("list-news", "list-article", "stream", "article", "news-list"))
+        ),
+        limit=20,
+    )
+    for index, node in enumerate(candidates, start=1):
+        text_excerpt = node.get_text(" ", strip=True)[:220]
+        print(
+            f"DIAG_CANDIDATE[{index}] tag={node.name} id={node.get('id', '')!r} "
+            f"class={node.get('class', [])!r} "
+            f"articles={len(node.select('article'))} "
+            f"text={json.dumps(text_excerpt, ensure_ascii=False)}"
+        )
+    print("DIAG_CONTAINER_CANDIDATES_END")
 
     body_text = soup.get_text(" ", strip=True).lower()
     markers = (
@@ -122,7 +133,10 @@ def _print_page_diagnostics(response: requests.Response) -> None:
         "verify you are human", "temporarily unavailable",
         "dịch vụ không khả dụng", "truy cập bị từ chối",
     )
-    print(f"DIAG_BLOCK_MARKERS={[m for m in markers if m in body_text]}")
+    matched = [marker for marker in markers if marker in body_text]
+    print(f"DIAG_BLOCK_MARKERS={matched}")
+    snippet = response.text[:1800].replace("\r", " ").replace("\n", " ")
+    print(f"DIAG_HTML_HEAD={json.dumps(snippet, ensure_ascii=False)}")
 
 
 def main() -> int:
@@ -142,15 +156,23 @@ def main() -> int:
     source["html"]["max_articles"] = max(1, min(args.max_articles, 100))
     source["html"]["max_pages"] = 1
 
+    settings = {"crawler": {"request_timeout": 25}}
     print(f"SMOKE_SOURCE={args.url}")
-    print(f"LIMITS=max_articles:{source['html']['max_articles']},max_pages:1")
+    print(
+        "LIMITS="
+        f"max_articles:{source['html']['max_articles']},"
+        "max_pages:1"
+    )
 
-    discovery = SourceDiscovery(source, {"crawler": {"request_timeout": 25}})
+    discovery = SourceDiscovery(source, settings)
     discovery.session.headers.update(DEFAULT_HEADERS)
+
     session = discovery.session
     original_get = session.get
     try:
-        first_response = original_get(args.url, timeout=25, allow_redirects=True)
+        first_response = original_get(
+            args.url, timeout=25, allow_redirects=True
+        )
         _print_page_diagnostics(first_response)
     except requests.RequestException as exc:
         print(f"DIAG_REQUEST_ERROR={type(exc).__name__}: {exc}")
@@ -168,6 +190,7 @@ def main() -> int:
 
     session.get = get_with_cached_first_response
     refs = discovery.discover()
+
     print(f"DISCOVERED_COUNT={len(refs)}")
     for index, ref in enumerate(refs, start=1):
         print(f"DISCOVERED[{index}]={ref.url}")
@@ -177,7 +200,8 @@ def main() -> int:
         return 1
 
     extractor = ArticleExtractor()
-    passed = failed = 0
+    passed = 0
+    failed = 0
     article_session = requests.Session()
     article_session.headers.update(DEFAULT_HEADERS)
 
@@ -185,15 +209,21 @@ def main() -> int:
         temp_path = Path(temp_dir)
         for index, ref in enumerate(refs, start=1):
             try:
-                response = article_session.get(ref.url, timeout=25, allow_redirects=True)
+                response = article_session.get(
+                    ref.url, timeout=25, allow_redirects=True
+                )
                 response.raise_for_status()
                 final_host = (urlparse(response.url).hostname or "").lower()
                 if final_host not in {"vnexpress.net", "www.vnexpress.net"}:
-                    raise ValueError(f"article redirected outside VnExpress: {response.url}")
+                    raise ValueError(
+                        f"article redirected outside VnExpress: {response.url}"
+                    )
+
                 html_path = temp_path / f"article-{index}.html"
                 html_path.write_text(response.text, encoding="utf-8")
                 article = extractor.extract(html_path, ref.url, source)
                 ok, reason = extractor.quality_check(article, source)
+
                 title = (article.get("title") or "").strip()
                 body = (article.get("body") or "").strip()
                 paragraphs = len(ArticleExtractor._paragraphs(body))
@@ -203,6 +233,7 @@ def main() -> int:
                 else:
                     failed += 1
                     status = f"FAIL:{reason}"
+
                 print(
                     f"ARTICLE[{index}]={status} "
                     f"title={json.dumps(title, ensure_ascii=False)} "
@@ -214,10 +245,14 @@ def main() -> int:
                 print(f"ARTICLE[{index}]=ERROR {type(exc).__name__}: {exc}")
             time.sleep(0.5)
 
-    print(f"EXTRACTION_SUMMARY passed={passed} failed={failed} discovered={len(refs)}")
+    print(
+        f"EXTRACTION_SUMMARY passed={passed} failed={failed} "
+        f"discovered={len(refs)}"
+    )
     if passed == 0:
         print("RESULT=FAIL: no article passed extraction Quality Gate")
         return 1
+
     print("RESULT=PASS: at least one live article passed extraction Quality Gate")
     return 0
 

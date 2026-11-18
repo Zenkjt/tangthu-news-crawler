@@ -21,7 +21,9 @@ html:
   article_container_selectors:
     - "#paging, #list-news, .list-article"
   article_link_selectors:
+    # Góc nhìn uses item-news; current Hà Nội Today uses article-item.
     - "article.item-news h3.title-news a, article.item-news h2.title-news a"
+    - "article.article-item h2.title-news a"
   next_page_selectors:
     - 'a[rel~="next"]'
     - ".pagination a.next"

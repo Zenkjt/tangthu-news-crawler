@@ -85,12 +85,12 @@ def test_topic_adapter_accepts_current_hanoi_list_article_container():
     start = "https://vnexpress.net/thoi-su/ha-noi-today"
     html = """
     <div class="list-article">
-      <article class="item-news"><h3 class="title-news">
+      <article class="article-item"><h2 class="title-news">
         <a href="/ha-noi-bai-a-5133001.html">Tin Hà Nội A</a>
-      </h3></article>
-      <article class="item-news"><h3 class="title-news">
+      </h2></article>
+      <article class="article-item"><h2 class="title-news">
         <a href="/ha-noi-bai-b-5133002.html">Tin Hà Nội B</a>
-      </h3></article>
+      </h2></article>
     </div>
     <div class="list-news-subfolder">
       <article class="item-news"><h3 class="title-news">
