@@ -88,16 +88,16 @@ def test_topic_adapter_follows_same_topic_pagination_and_deduplicates():
     page2 = "https://vnexpress.net/goc-nhin/kinh-doanh-quan-tri-p2"
     html1 = """
     <div id="paging">
-      <article><h3 class="title-news"><a href="/bai-a-5133001.html">Bài A</a></h3></article>
-      <article><h3 class="title-news"><a href="/bai-b-5133002.html">Bài B</a></h3></article>
+      <article class="item-news"><h3 class="title-news"><a href="/bai-a-5133001.html">Bài A</a></h3></article>
+      <article class="item-news"><h3 class="title-news"><a href="/bai-b-5133002.html">Bài B</a></h3></article>
     </div>
     <nav class="pagination"><a href="/goc-nhin/kinh-doanh-quan-tri-p2" rel="next">Tiếp</a></nav>
     <a href="/goc-nhin/chinh-tri-chinh-sach-p2">Nhánh khác</a>
     """
     html2 = """
     <div id="paging">
-      <article><h3 class="title-news"><a href="/bai-b-5133002.html">Bài B lặp</a></h3></article>
-      <article><h3 class="title-news"><a href="/bai-c-5133003.html">Bài C</a></h3></article>
+      <article class="item-news"><h3 class="title-news"><a href="/bai-b-5133002.html">Bài B lặp</a></h3></article>
+      <article class="item-news"><h3 class="title-news"><a href="/bai-c-5133003.html">Bài C</a></h3></article>
     </div>
     """
     discovery = SourceDiscovery(make_source(start), {"crawler": {"request_timeout": 5}})
@@ -118,8 +118,8 @@ def test_topic_profile_stops_at_article_limit():
     start = "https://vnexpress.net/goc-nhin"
     html = """
     <div id="paging">
-      <article><h3 class="title-news"><a href="/bai-a-5133001.html">Bài A</a></h3></article>
-      <article><h3 class="title-news"><a href="/bai-b-5133002.html">Bài B</a></h3></article>
+      <article class="item-news"><h3 class="title-news"><a href="/bai-a-5133001.html">Bài A</a></h3></article>
+      <article class="item-news"><h3 class="title-news"><a href="/bai-b-5133002.html">Bài B</a></h3></article>
     </div>
     """
     discovery = SourceDiscovery(
@@ -140,7 +140,7 @@ def test_missing_configured_container_does_not_fall_back_to_popular_links():
     start = "https://vnexpress.net/goc-nhin"
     html = """
     <div class="popular">
-      <article><h3 class="title-news">
+      <article class="item-news"><h3 class="title-news">
         <a href="/popular-5133009.html">Bài nổi bật</a>
       </h3></article>
     </div>
@@ -155,7 +155,7 @@ def test_missing_configured_container_does_not_fall_back_to_popular_links():
 def test_topic_profile_keeps_its_own_start_url():
     topic_url = "https://vnexpress.net/goc-nhin/van-hoa-loi-song"
     html = """
-    <div id="paging"><article><h3 class="title-news">
+    <div id="paging"><article class="item-news"><h3 class="title-news">
       <a href="/bai-van-hoa-5133004.html">Bài</a>
     </h3></article></div>
     """
