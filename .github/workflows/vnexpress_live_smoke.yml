@@ -3,7 +3,13 @@ name: VnExpress 25 Articles Comparison Test
 on:
   push:
     branches:
-      - vnexpress-topic-adapter
+      - main
+    paths:
+      - "src/tangthu_crawler/**"
+      - "config/sources/vnexpress.yaml"
+      - "scripts/vnexpress_live_smoke.py"
+      - ".github/workflows/vnexpress_live_smoke.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,7 +33,7 @@ jobs:
             topic_url: https://vnexpress.net/thoi-su/ha-noi-today
 
     steps:
-      - name: Checkout feature branch
+      - name: Checkout main
         uses: actions/checkout@v4
         with:
           persist-credentials: false
