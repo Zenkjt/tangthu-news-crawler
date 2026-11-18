@@ -1,4 +1,4 @@
-name: VnExpress Live Smoke Test
+name: VnExpress 25 Articles Comparison Test
 
 on:
   push:
@@ -9,24 +9,22 @@ permissions:
   contents: read
 
 concurrency:
-  group: vnexpress-live-smoke-${{ github.ref }}
+  group: vnexpress-25x2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   smoke-test:
-    name: Smoke test - ${{ matrix.topic_name }}
+    name: 25 articles - ${{ matrix.topic_name }}
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         include:
           - topic_name: goc-nhin
             topic_url: https://vnexpress.net/goc-nhin
-          - topic_name: kinh-doanh-quan-tri
-            topic_url: https://vnexpress.net/goc-nhin/kinh-doanh-quan-tri
-          - topic_name: van-hoa-loi-song
-            topic_url: https://vnexpress.net/goc-nhin/van-hoa-loi-song
+          - topic_name: ha-noi
+            topic_url: https://vnexpress.net/thoi-su/ha-noi-today
 
     steps:
       - name: Checkout feature branch
@@ -43,9 +41,9 @@ jobs:
       - name: Install project dependencies
         run: python -m pip install -e ".[dev]"
 
-      - name: Run VnExpress live smoke test
+      - name: Discover and extract first 25 articles
         run: |
           python scripts/vnexpress_live_smoke.py \
             --url "${{ matrix.topic_url }}" \
-            --max-articles 10 \
-            --max-pages 3
+            --max-articles 25 \
+            --max-pages 1
