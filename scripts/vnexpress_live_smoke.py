@@ -26,6 +26,8 @@ DEFAULT_HEADERS = {
     "Referer": "https://vnexpress.net/",
 }
 
+CONTAINER_SELECTOR = "#paging, #list-news, .list-article"
+
 SOURCE_BASE = {
     "id": "vnexpress-live-smoke",
     "name": "VnExpress live smoke test",
@@ -35,7 +37,7 @@ SOURCE_BASE = {
         "strategy": "page_articles",
         "max_articles": 5,
         "max_pages": 1,
-        "article_container_selectors": ["#paging, #list-news"],
+        "article_container_selectors": [CONTAINER_SELECTOR],
         "article_link_selectors": [
             "article.item-news h3.title-news a",
             "article.item-news h2.title-news a",
@@ -77,16 +79,27 @@ def _print_page_diagnostics(response: requests.Response) -> None:
     print(f"DIAG_HTML_BYTES={len(response.content)}")
     print(f"DIAG_TITLE={json.dumps(title, ensure_ascii=False)}")
 
+    selectors = ("#paging", "#list-news", ".list-article")
     found = []
-    for selector in ("#paging", "#list-news"):
+    for selector in selectors:
         node = soup.select_one(selector)
         if node:
-            count = len(node.select("article.item-news"))
             found.append(selector)
+            cards = node.select("article")
             print(
                 f"DIAG_CONTAINER selector={selector} tag={node.name} "
-                f"class={node.get('class', [])} article_cards={count}"
+                f"class={node.get('class', [])} article_cards={len(cards)}"
             )
+            for index, card in enumerate(cards[:8], start=1):
+                anchor = card.select_one(
+                    "h3.title-news a, h2.title-news a, a[href$='.html']"
+                )
+                if anchor:
+                    print(
+                        f"DIAG_CARD[{selector}][{index}] "
+                        f"title={json.dumps(anchor.get_text(' ', strip=True), ensure_ascii=False)} "
+                        f"href={anchor.get('href', '')}"
+                    )
         else:
             print(f"DIAG_CONTAINER selector={selector} NOT_FOUND")
 
@@ -100,7 +113,7 @@ def _print_page_diagnostics(response: requests.Response) -> None:
             any(word in str(tag.get("id", "")).lower()
                 for word in ("list", "news", "paging", "stream", "article"))
             or any(word in " ".join(tag.get("class", [])).lower()
-                   for word in ("list-news", "stream", "article", "news-list"))
+                   for word in ("list-news", "list-article", "stream", "article", "news-list"))
         ),
         limit=20,
     )
@@ -141,8 +154,6 @@ def main() -> int:
     source["url"] = args.url
     source["html"] = dict(SOURCE_BASE["html"])
     source["html"]["max_articles"] = max(1, min(args.max_articles, 100))
-    # This diagnostic run deliberately tests one page only; pagination is
-    # disabled so the result isolates the topic-page DOM.
     source["html"]["max_pages"] = 1
 
     settings = {"crawler": {"request_timeout": 25}}
@@ -150,15 +161,12 @@ def main() -> int:
     print(
         "LIMITS="
         f"max_articles:{source['html']['max_articles']},"
-        f"max_pages:1"
+        "max_pages:1"
     )
 
     discovery = SourceDiscovery(source, settings)
     discovery.session.headers.update(DEFAULT_HEADERS)
 
-    # Fetch once for diagnostics, then replay that exact response to the
-    # adapter. This guarantees the diagnostic describes the HTML discovery
-    # actually sees, without introducing a second independent page response.
     session = discovery.session
     original_get = session.get
     try:
@@ -199,14 +207,12 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory(prefix="vnexpress-smoke-") as temp_dir:
         temp_path = Path(temp_dir)
-
         for index, ref in enumerate(refs, start=1):
             try:
                 response = article_session.get(
                     ref.url, timeout=25, allow_redirects=True
                 )
                 response.raise_for_status()
-
                 final_host = (urlparse(response.url).hostname or "").lower()
                 if final_host not in {"vnexpress.net", "www.vnexpress.net"}:
                     raise ValueError(
@@ -215,14 +221,12 @@ def main() -> int:
 
                 html_path = temp_path / f"article-{index}.html"
                 html_path.write_text(response.text, encoding="utf-8")
-
                 article = extractor.extract(html_path, ref.url, source)
                 ok, reason = extractor.quality_check(article, source)
 
                 title = (article.get("title") or "").strip()
                 body = (article.get("body") or "").strip()
                 paragraphs = len(ArticleExtractor._paragraphs(body))
-
                 if ok:
                     passed += 1
                     status = "PASS"
@@ -238,18 +242,13 @@ def main() -> int:
                 )
             except Exception as exc:
                 failed += 1
-                print(
-                    f"ARTICLE[{index}]=ERROR "
-                    f"{type(exc).__name__}: {exc}"
-                )
-
+                print(f"ARTICLE[{index}]=ERROR {type(exc).__name__}: {exc}")
             time.sleep(0.5)
 
     print(
         f"EXTRACTION_SUMMARY passed={passed} failed={failed} "
         f"discovered={len(refs)}"
     )
-
     if passed == 0:
         print("RESULT=FAIL: no article passed extraction Quality Gate")
         return 1

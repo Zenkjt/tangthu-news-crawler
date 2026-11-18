@@ -36,7 +36,7 @@ def make_source(url: str, *, max_articles: int = 20, max_pages: int = 4):
         "html": {
             "max_articles": max_articles,
             "max_pages": max_pages,
-            "article_container_selectors": ["#paging, #list-news"],
+            "article_container_selectors": ["#paging, #list-news, .list-article"],
             "article_link_selectors": [
                 "article.item-news h3.title-news a, article.item-news h2.title-news a",
             ],
@@ -72,13 +72,39 @@ def test_topic_adapter_scopes_to_main_stream_and_preserves_dom_order():
     discovery = SourceDiscovery(make_source(start), {"crawler": {"request_timeout": 5}})
     fake = FakeSession({start: html})
     discovery.session = fake
-
     refs = discovery.discover()
-
     assert [ref.url for ref in refs] == [
         "https://vnexpress.net/bai-thu-nhat-5133001.html",
         "https://vnexpress.net/bai-thu-hai-5133002.html",
         "https://vnexpress.net/bai-thu-ba-5133003.html",
+    ]
+    assert fake.calls == [start]
+
+
+def test_topic_adapter_accepts_current_hanoi_list_article_container():
+    start = "https://vnexpress.net/thoi-su/ha-noi-today"
+    html = """
+    <div class="list-article">
+      <article class="item-news"><h3 class="title-news">
+        <a href="/ha-noi-bai-a-5133001.html">Tin Hà Nội A</a>
+      </h3></article>
+      <article class="item-news"><h3 class="title-news">
+        <a href="/ha-noi-bai-b-5133002.html">Tin Hà Nội B</a>
+      </h3></article>
+    </div>
+    <div class="list-news-subfolder">
+      <article class="item-news"><h3 class="title-news">
+        <a href="/tin-phu-5133003.html">Tin phụ không được lấy</a>
+      </h3></article>
+    </div>
+    """
+    discovery = SourceDiscovery(make_source(start), {"crawler": {"request_timeout": 5}})
+    fake = FakeSession({start: html})
+    discovery.session = fake
+    refs = discovery.discover()
+    assert [ref.url for ref in refs] == [
+        "https://vnexpress.net/ha-noi-bai-a-5133001.html",
+        "https://vnexpress.net/ha-noi-bai-b-5133002.html",
     ]
     assert fake.calls == [start]
 
@@ -103,9 +129,7 @@ def test_topic_adapter_follows_same_topic_pagination_and_deduplicates():
     discovery = SourceDiscovery(make_source(start), {"crawler": {"request_timeout": 5}})
     fake = FakeSession({start: html1, page2: html2})
     discovery.session = fake
-
     refs = discovery.discover()
-
     assert [ref.url for ref in refs] == [
         "https://vnexpress.net/bai-a-5133001.html",
         "https://vnexpress.net/bai-b-5133002.html",
@@ -128,9 +152,7 @@ def test_topic_profile_stops_at_article_limit():
     )
     fake = FakeSession({start: html})
     discovery.session = fake
-
     refs = discovery.discover()
-
     assert len(refs) == 1
     assert refs[0].url.endswith("bai-a-5133001.html")
     assert fake.calls == [start]
@@ -148,7 +170,6 @@ def test_missing_configured_container_does_not_fall_back_to_popular_links():
     discovery = SourceDiscovery(make_source(start), {"crawler": {"request_timeout": 5}})
     fake = FakeSession({start: html})
     discovery.session = fake
-
     assert discovery.discover() == []
 
 
@@ -162,8 +183,6 @@ def test_topic_profile_keeps_its_own_start_url():
     discovery = SourceDiscovery(make_source(topic_url), {"crawler": {"request_timeout": 5}})
     fake = FakeSession({topic_url: html})
     discovery.session = fake
-
     refs = discovery.discover()
-
     assert fake.calls == [topic_url]
     assert refs[0].url.endswith("bai-van-hoa-5133004.html")
