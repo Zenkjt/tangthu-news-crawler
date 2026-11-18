@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import time
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 
 from datetime import datetime, timezone
@@ -71,18 +72,35 @@ class VnExpressTopicAdapter:
                 break
             seen_pages.add(page_url)
 
-            try:
-                response = self.session.get(
-                    page_url,
-                    timeout=self.timeout,
-                    allow_redirects=True,
-                )
-                response.raise_for_status()
-            except requests.RequestException as exc:
-                print(
-                    f"{self.source.get('id', 'vnexpress')}: "
-                    f"topic page failed {page_url}: {type(exc).__name__}: {exc}"
-                )
+            response = None
+            for attempt in range(4):
+                try:
+                    response = self.session.get(
+                        page_url,
+                        timeout=self.timeout,
+                        allow_redirects=True,
+                    )
+                    response.raise_for_status()
+                    break
+                except requests.RequestException as exc:
+                    status_code = getattr(getattr(exc, "response", None), "status_code", None)
+                    retryable = status_code in {429, 500, 502, 503, 504} or status_code is None
+                    if not retryable or attempt >= 3:
+                        print(
+                            f"{self.source.get('id', 'vnexpress')}: "
+                            f"topic page failed {page_url}: {type(exc).__name__}: {exc}"
+                        )
+                        response = None
+                        break
+                    delay = min(2 ** attempt, 8)
+                    print(
+                        f"{self.source.get('id', 'vnexpress')}: "
+                        f"temporary request failure status={status_code}; "
+                        f"retry={attempt + 1}/3 in {delay}s"
+                    )
+                    time.sleep(delay)
+
+            if response is None:
                 break
 
             final_url = self._canonicalize(response.url or page_url) or page_url

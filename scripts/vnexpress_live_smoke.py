@@ -34,7 +34,7 @@ SOURCE_BASE = {
         "strategy": "page_articles",
         "max_articles": 5,
         "max_pages": 3,
-        "article_container_selectors": ["#paging"],
+        "article_container_selectors": ["#paging, #list-news"],
         "article_link_selectors": [
             "article.item-news h3.title-news a",
             "article.item-news h2.title-news a",
