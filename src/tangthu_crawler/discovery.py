@@ -6,6 +6,7 @@ from xml.etree import ElementTree
 import requests
 from bs4 import BeautifulSoup
 from .models import ArticleRef
+from .vnexpress_adapter import VnExpressTopicAdapter
 
 
 class SourceDiscovery:
@@ -63,6 +64,14 @@ class SourceDiscovery:
         return r.text
 
     def _html(self):
+        if self.source.get("site_adapter") == "vnexpress":
+            adapter = VnExpressTopicAdapter(
+                self.source,
+                self.session,
+                timeout=self.timeout,
+            )
+            return [ref.url for ref in adapter.discover()]
+
         cfg = self.source.get("html", {})
         strategy = cfg.get("strategy", "generic")
         if strategy == "page_articles":
@@ -274,13 +283,21 @@ class SourceDiscovery:
         return urls
 
     def _normalize(self, urls):
-        host = urlparse(self.source["url"]).netloc.lower()
+        source_host = (urlparse(self.source["url"]).hostname or "").lower()
         seen = set()
         now = datetime.now(timezone.utc)
         result = []
         for raw in urls:
             url = self._canonicalize(raw)
-            if not url or urlparse(url).netloc.lower() != host or url in seen:
+            if not url:
+                continue
+            host = (urlparse(url).hostname or "").lower()
+            same_host = (
+                host == source_host
+                or host.endswith("." + source_host)
+                or source_host.endswith("." + host)
+            )
+            if not same_host or url in seen:
                 continue
             seen.add(url)
             result.append(ArticleRef(self.source["id"], url, now))
