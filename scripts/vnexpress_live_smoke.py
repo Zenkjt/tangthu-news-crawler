@@ -41,6 +41,7 @@ SOURCE_BASE = {
         "article_link_selectors": [
             "article.item-news h3.title-news a",
             "article.item-news h2.title-news a",
+            "article.article-item h2.title-news a",
         ],
         "next_page_selectors": [],
         "excluded_path_prefixes": [
@@ -104,6 +105,15 @@ def _print_page_diagnostics(response: requests.Response) -> None:
             print(f"DIAG_CONTAINER selector={selector} NOT_FOUND")
 
     if found:
+        for selector in (
+            "article.item-news h3.title-news a",
+            "article.item-news h2.title-news a",
+            "article.article-item h2.title-news a",
+        ):
+            print(
+                f"DIAG_SELECTOR_MATCHES {selector}="
+                f"{len(soup.select(selector))}"
+            )
         return
 
     print("DIAG_CONTAINER_CANDIDATES_BEGIN")
