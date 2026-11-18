@@ -17,7 +17,9 @@ dist/
 *.egg-info/
 
 # Runtime data
-data/
+data/article_pool/
+data/edition_pool/
+data/editions/
 *.epub
 
 # Local files
