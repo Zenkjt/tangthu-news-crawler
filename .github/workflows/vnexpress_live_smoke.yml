@@ -1,4 +1,3 @@
-
 name: VnExpress Live Smoke Test
 
 on:
@@ -15,8 +14,19 @@ concurrency:
 
 jobs:
   smoke-test:
+    name: Smoke test - ${{ matrix.topic_name }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - topic_name: goc-nhin
+            topic_url: https://vnexpress.net/goc-nhin
+          - topic_name: kinh-doanh-quan-tri
+            topic_url: https://vnexpress.net/goc-nhin/kinh-doanh-quan-tri
+          - topic_name: van-hoa-loi-song
+            topic_url: https://vnexpress.net/goc-nhin/van-hoa-loi-song
 
     steps:
       - name: Checkout feature branch
@@ -36,6 +46,6 @@ jobs:
       - name: Run VnExpress live smoke test
         run: |
           python scripts/vnexpress_live_smoke.py \
-            --url "https://vnexpress.net/goc-nhin" \
-            --max-articles 5 \
+            --url "${{ matrix.topic_url }}" \
+            --max-articles 10 \
             --max-pages 3
