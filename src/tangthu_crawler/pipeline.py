@@ -117,7 +117,8 @@ def _resolve_sources(
 
         local = by_url.get(url)
         if local is None:
-            local = by_host.get((urlparse(url).hostname or "").lower())
+            host = (urlparse(url).hostname or "").lower().removeprefix("www.")
+            local = by_host.get(host)
 
         if local:
             config = dict(local)
