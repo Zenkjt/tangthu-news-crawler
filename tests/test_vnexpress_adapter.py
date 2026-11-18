@@ -36,51 +36,71 @@ def make_source(url: str, *, max_articles: int = 20, max_pages: int = 4):
         "html": {
             "max_articles": max_articles,
             "max_pages": max_pages,
-            "article_link_selectors": [".title-news a", "article h3 a"],
+            "article_container_selectors": ["#paging"],
+            "article_link_selectors": [
+                "article.item-news h3.title-news a, article.item-news h2.title-news a",
+            ],
         },
     }
 
 
-def test_topic_adapter_collects_article_links_and_rejects_non_articles(monkeypatch):
+def test_topic_adapter_scopes_to_main_stream_and_preserves_dom_order():
     start = "https://vnexpress.net/goc-nhin"
     html = """
     <html><body>
-      <article><h3 class="title-news"><a href="/bai-viet-thu-nhat-5133001.html">Bài 1</a></h3></article>
-      <article><h3 class="title-news"><a href="/bai-viet-thu-hai-5133002.html">Bài 2</a></h3></article>
-      <a href="/tac-gia/vo-ta-han-50.html">Tác giả</a>
-      <a href="/tag/goc-nhin-123">Tag</a>
-      <a href="https://example.com/bai-viet-123.html">External</a>
+      <div class="popular">
+        <article class="item-news"><h3 class="title-news">
+          <a href="/popular-5133009.html">Bài nổi bật</a>
+        </h3></article>
+      </div>
+      <div id="paging" class="list-news-subfolder">
+        <article class="item-news item-1"><h3 class="title-news">
+          <a href="/bai-thu-nhat-5133001.html">Bài 1</a>
+        </h3></article>
+        <article class="item-news item-2"><h3 class="title-news">
+          <a href="/bai-thu-hai-5133002.html">Bài 2</a>
+        </h3></article>
+        <article class="item-news close_not_qc"></article>
+        <article class="item-news item-3"><h3 class="title-news">
+          <a href="/bai-thu-ba-5133003.html">Bài 3</a>
+        </h3></article>
+        <a href="/tac-gia/vo-ta-han-50.html">Tác giả</a>
+        <a href="https://example.com/bai-ngoai-5133010.html">External</a>
+      </div>
     </body></html>
     """
-    source = make_source(start)
-    discovery = SourceDiscovery(source, {"crawler": {"request_timeout": 5}})
+    discovery = SourceDiscovery(make_source(start), {"crawler": {"request_timeout": 5}})
     fake = FakeSession({start: html})
     discovery.session = fake
 
     refs = discovery.discover()
 
     assert [ref.url for ref in refs] == [
-        "https://vnexpress.net/bai-viet-thu-nhat-5133001.html",
-        "https://vnexpress.net/bai-viet-thu-hai-5133002.html",
+        "https://vnexpress.net/bai-thu-nhat-5133001.html",
+        "https://vnexpress.net/bai-thu-hai-5133002.html",
+        "https://vnexpress.net/bai-thu-ba-5133003.html",
     ]
     assert fake.calls == [start]
 
 
-def test_topic_adapter_follows_only_same_topic_pagination_and_deduplicates(monkeypatch):
+def test_topic_adapter_follows_same_topic_pagination_and_deduplicates():
     start = "https://vnexpress.net/goc-nhin/kinh-doanh-quan-tri-p1"
     page2 = "https://vnexpress.net/goc-nhin/kinh-doanh-quan-tri-p2"
     html1 = """
-    <article><h3 class="title-news"><a href="/bai-a-5133001.html">Bài A</a></h3></article>
-    <article><h3 class="title-news"><a href="/bai-b-5133002.html">Bài B</a></h3></article>
+    <div id="paging">
+      <article><h3 class="title-news"><a href="/bai-a-5133001.html">Bài A</a></h3></article>
+      <article><h3 class="title-news"><a href="/bai-b-5133002.html">Bài B</a></h3></article>
+    </div>
     <nav class="pagination"><a href="/goc-nhin/kinh-doanh-quan-tri-p2" rel="next">Tiếp</a></nav>
     <a href="/goc-nhin/chinh-tri-chinh-sach-p2">Nhánh khác</a>
     """
     html2 = """
-    <article><h3 class="title-news"><a href="/bai-b-5133002.html">Bài B lặp</a></h3></article>
-    <article><h3 class="title-news"><a href="/bai-c-5133003.html">Bài C</a></h3></article>
+    <div id="paging">
+      <article><h3 class="title-news"><a href="/bai-b-5133002.html">Bài B lặp</a></h3></article>
+      <article><h3 class="title-news"><a href="/bai-c-5133003.html">Bài C</a></h3></article>
+    </div>
     """
-    source = make_source(start)
-    discovery = SourceDiscovery(source, {"crawler": {"request_timeout": 5}})
+    discovery = SourceDiscovery(make_source(start), {"crawler": {"request_timeout": 5}})
     fake = FakeSession({start: html1, page2: html2})
     discovery.session = fake
 
@@ -94,20 +114,19 @@ def test_topic_adapter_follows_only_same_topic_pagination_and_deduplicates(monke
     assert fake.calls == [start, page2]
 
 
-def test_topic_adapter_obeys_article_and_page_limits():
+def test_topic_profile_stops_at_article_limit():
     start = "https://vnexpress.net/goc-nhin"
-    page2 = "https://vnexpress.net/goc-nhin-p2"
-    html1 = """
-    <article><h3 class="title-news"><a href="/bai-a-5133001.html">Bài A</a></h3></article>
-    <nav class="pagination"><a href="/goc-nhin-p2">2</a></nav>
+    html = """
+    <div id="paging">
+      <article><h3 class="title-news"><a href="/bai-a-5133001.html">Bài A</a></h3></article>
+      <article><h3 class="title-news"><a href="/bai-b-5133002.html">Bài B</a></h3></article>
+    </div>
     """
-    html2 = """
-    <article><h3 class="title-news"><a href="/bai-b-5133002.html">Bài B</a></h3></article>
-    <nav class="pagination"><a href="/goc-nhin-p3">3</a></nav>
-    """
-    source = make_source(start, max_articles=1, max_pages=3)
-    discovery = SourceDiscovery(source, {"crawler": {"request_timeout": 5}})
-    fake = FakeSession({start: html1, page2: html2})
+    discovery = SourceDiscovery(
+        make_source(start, max_articles=1),
+        {"crawler": {"request_timeout": 5}},
+    )
+    fake = FakeSession({start: html})
     discovery.session = fake
 
     refs = discovery.discover()
@@ -117,11 +136,30 @@ def test_topic_adapter_obeys_article_and_page_limits():
     assert fake.calls == [start]
 
 
+def test_missing_configured_container_does_not_fall_back_to_popular_links():
+    start = "https://vnexpress.net/goc-nhin"
+    html = """
+    <div class="popular">
+      <article><h3 class="title-news">
+        <a href="/popular-5133009.html">Bài nổi bật</a>
+      </h3></article>
+    </div>
+    """
+    discovery = SourceDiscovery(make_source(start), {"crawler": {"request_timeout": 5}})
+    fake = FakeSession({start: html})
+    discovery.session = fake
+
+    assert discovery.discover() == []
+
+
 def test_topic_profile_keeps_its_own_start_url():
     topic_url = "https://vnexpress.net/goc-nhin/van-hoa-loi-song"
-    html = '<article><h3 class="title-news"><a href="/bai-van-hoa-5133004.html">Bài</a></h3></article>'
-    source = make_source(topic_url)
-    discovery = SourceDiscovery(source, {"crawler": {"request_timeout": 5}})
+    html = """
+    <div id="paging"><article><h3 class="title-news">
+      <a href="/bai-van-hoa-5133004.html">Bài</a>
+    </h3></article></div>
+    """
+    discovery = SourceDiscovery(make_source(topic_url), {"crawler": {"request_timeout": 5}})
     fake = FakeSession({topic_url: html})
     discovery.session = fake
 

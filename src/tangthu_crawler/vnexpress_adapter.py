@@ -14,25 +14,23 @@ from .models import ArticleRef
 class VnExpressTopicAdapter:
     """Discovery adapter for VnExpress homepage and topic/category listings.
 
-    The adapter is shared by the whole VnExpress site. The registered source URL
-    is the discovery-profile boundary: each invocation starts from that exact URL
-    and follows pagination belonging to that listing only.
+    Each registered source URL is its own discovery profile. When a profile
+    defines article containers, extraction is strictly scoped to those
+    containers and preserves their document order.
     """
 
     ARTICLE_PATH_RE = re.compile(r"-[0-9]+\.html$", re.I)
-    PAGE_SUFFIX_RE = re.compile(r"(?P<base>.*?)(?:-p(?P<page>\d+)|/p(?P<slash_page>\d+)|/page/(?P<page_dir>\d+))$", re.I)
+    PAGE_SUFFIX_RE = re.compile(
+        r"(?P<base>.*?)(?:-p(?P<page>\d+)|/p(?P<slash_page>\d+)|/page/(?P<page_dir>\d+))$",
+        re.I,
+    )
     EXCLUDED_PREFIXES = (
         "/tac-gia/", "/author/", "/chu-de/", "/tag/", "/video/",
         "/photo/", "/podcast/", "/live/", "/tim-kiem/", "/search/",
     )
     DEFAULT_ARTICLE_SELECTORS = (
-        ".title-news a",
         "h3.title-news a",
         "h2.title-news a",
-        "article h3 a",
-        "article h2 a",
-        ".item-news .title-news a",
-        ".item-news a[href]",
     )
     DEFAULT_NEXT_SELECTORS = (
         'a[rel~="next"]',
@@ -47,6 +45,9 @@ class VnExpressTopicAdapter:
         self.cfg = source.get("html", {})
         self.max_articles = max(1, int(self.cfg.get("max_articles", 20)))
         self.max_pages = max(1, int(self.cfg.get("max_pages", 4)))
+        self.container_selectors = tuple(
+            self.cfg.get("article_container_selectors") or ()
+        )
         self.article_selectors = tuple(
             self.cfg.get("article_link_selectors") or self.DEFAULT_ARTICLE_SELECTORS
         )
@@ -82,8 +83,6 @@ class VnExpressTopicAdapter:
                     f"{self.source.get('id', 'vnexpress')}: "
                     f"topic page failed {page_url}: {type(exc).__name__}: {exc}"
                 )
-                # A failed first page means the profile is unusable. A later
-                # page failure preserves the already discovered first-page set.
                 break
 
             final_url = self._canonicalize(response.url or page_url) or page_url
@@ -122,24 +121,40 @@ class VnExpressTopicAdapter:
         ]
 
     def _extract_article_links(self, soup: BeautifulSoup, page_url: str) -> list[str]:
+        # A configured container is authoritative. Never fall back to the
+        # whole page: VnExpress pages contain separate "Đọc nhiều" highlights
+        # before the actual article stream.
+        containers = []
+        if self.container_selectors:
+            for selector in self.container_selectors:
+                containers.extend(soup.select(selector))
+            if not containers:
+                print(
+                    f"{self.source.get('id', 'vnexpress')}: "
+                    f"article container not found; selectors={self.container_selectors}"
+                )
+                return []
+        else:
+            containers = [soup]
+
         links: list[str] = []
         seen: set[str] = set()
+        for container in containers:
+            for selector in self.article_selectors:
+                for anchor in container.select(selector):
+                    href = anchor.get("href")
+                    if not href:
+                        continue
+                    candidate = self._canonicalize(urljoin(page_url, href))
+                    if not candidate or not self._is_article_url(candidate):
+                        continue
+                    if candidate not in seen:
+                        seen.add(candidate)
+                        links.append(candidate)
 
-        for selector in self.article_selectors:
-            for anchor in soup.select(selector):
-                href = anchor.get("href")
-                if not href:
-                    continue
-                candidate = self._canonicalize(urljoin(page_url, href))
-                if not candidate or not self._is_article_url(candidate):
-                    continue
-                if candidate not in seen:
-                    seen.add(candidate)
-                    links.append(candidate)
-
-        # Selector fallback is deliberately strict: a URL must match the
-        # VnExpress article slug/id shape. Do not use generic link scoring.
-        if not links:
+        # Strict fallback is allowed only when no container was configured.
+        # This avoids reintroducing popular/highlight links into a feed.
+        if not links and not self.container_selectors:
             for anchor in soup.find_all("a", href=True):
                 candidate = self._canonicalize(urljoin(page_url, anchor["href"]))
                 if not candidate or not self._is_article_url(candidate):
@@ -196,12 +211,12 @@ class VnExpressTopicAdapter:
             text = " ".join(anchor.stripped_strings).strip().casefold()
             classes = {str(value).casefold() for value in anchor.get("class", [])}
             is_explicit = id(anchor) in explicit_ids or "next" in rel or "next" in classes
-            is_next_text = text in {"tiếp", "trang tiếp", "sau", "next", "next page", "›", "»", "→", ">"}
-            if not is_explicit and not is_next_text and page_number <= current_number:
+            is_next_text = text in {
+                "tiếp", "trang tiếp", "sau", "next", "next page", "›", "»", "→", ">"
+            }
+            if not is_explicit and not is_next_text:
                 continue
 
-            # The smallest greater page number is the natural next page.
-            # Explicit rel/class next wins only when it points to that page.
             score = 1 if is_explicit or is_next_text else 0
             candidates.append((page_number, -score, candidate))
 

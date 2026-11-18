@@ -34,14 +34,10 @@ SOURCE_BASE = {
         "strategy": "page_articles",
         "max_articles": 5,
         "max_pages": 3,
+        "article_container_selectors": ["#paging"],
         "article_link_selectors": [
-            ".title-news a",
-            "h3.title-news a",
-            "h2.title-news a",
-            "article h3 a",
-            "article h2 a",
-            ".item-news .title-news a",
-            ".item-news a[href]",
+            "article.item-news h3.title-news a",
+            "article.item-news h2.title-news a",
         ],
         "next_page_selectors": [
             'a[rel~="next"]',
@@ -154,10 +150,7 @@ def main() -> int:
                 )
             except Exception as exc:
                 failed += 1
-                print(
-                    f"ARTICLE[{index}]=ERROR "
-                    f"{type(exc).__name__}: {exc}"
-                )
+                print(f"ARTICLE[{index}]=ERROR {type(exc).__name__}: {exc}")
 
             time.sleep(0.5)
 

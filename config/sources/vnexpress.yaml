@@ -15,14 +15,12 @@ html:
   strategy: page_articles
   max_articles: 20
   max_pages: 4
+  # VnExpress pages put "Đọc nhiều" cards outside the real article stream.
+  # Scope discovery to the stream container and retain its DOM order.
+  article_container_selectors:
+    - "#paging"
   article_link_selectors:
-    - ".title-news a"
-    - "h3.title-news a"
-    - "h2.title-news a"
-    - "article h3 a"
-    - "article h2 a"
-    - ".item-news .title-news a"
-    - ".item-news a[href]"
+    - "article.item-news h3.title-news a, article.item-news h2.title-news a"
   next_page_selectors:
     - 'a[rel~="next"]'
     - ".pagination a.next"
