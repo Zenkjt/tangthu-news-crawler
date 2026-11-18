@@ -2,22 +2,9 @@
 name: VnExpress Live Smoke Test
 
 on:
-  workflow_dispatch:
-    inputs:
-      topic_url:
-        description: "VnExpress topic URL to test"
-        required: true
-        type: string
-      max_articles:
-        description: "Maximum articles to fetch and extract (1-10)"
-        required: true
-        default: "5"
-        type: string
-      max_pages:
-        description: "Maximum listing pages to inspect (1-5)"
-        required: true
-        default: "3"
-        type: string
+  push:
+    branches:
+      - vnexpress-topic-adapter
 
 permissions:
   contents: read
@@ -30,8 +17,9 @@ jobs:
   smoke-test:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+
     steps:
-      - name: Checkout selected branch
+      - name: Checkout feature branch
         uses: actions/checkout@v4
         with:
           persist-credentials: false
@@ -45,13 +33,9 @@ jobs:
       - name: Install project dependencies
         run: python -m pip install -e ".[dev]"
 
-      - name: Discover live articles and validate extraction
+      - name: Run VnExpress live smoke test
         run: |
           python scripts/vnexpress_live_smoke.py \
-            --url "$TOPIC_URL" \
-            --max-articles "$MAX_ARTICLES" \
-            --max-pages "$MAX_PAGES"
-        env:
-          TOPIC_URL: ${{ inputs.topic_url }}
-          MAX_ARTICLES: ${{ inputs.max_articles }}
-          MAX_PAGES: ${{ inputs.max_pages }}
+            --url "https://vnexpress.net/goc-nhin" \
+            --max-articles 5 \
+            --max-pages 3
