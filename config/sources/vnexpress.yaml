@@ -2,6 +2,7 @@ id: vnexpress
 name: VnExpress
 url: https://vnexpress.net
 status: active
+site_adapter: vnexpress
 
 http:
   headers:
@@ -13,11 +14,19 @@ discovery:
 html:
   strategy: page_articles
   max_articles: 20
+  max_pages: 4
   article_link_selectors:
     - ".title-news a"
+    - "h3.title-news a"
+    - "h2.title-news a"
     - "article h3 a"
     - "article h2 a"
-    - "article a"
+    - ".item-news .title-news a"
+    - ".item-news a[href]"
+  next_page_selectors:
+    - 'a[rel~="next"]'
+    - ".pagination a.next"
+    - "a.btn-next"
   excluded_path_prefixes:
     - /tag/
     - /topic/
