@@ -88,7 +88,7 @@ def main() -> int:
     source = dict(SOURCE_BASE)
     source["url"] = args.url
     source["html"] = dict(SOURCE_BASE["html"])
-    source["html"]["max_articles"] = max(1, min(args.max_articles, 10))
+    source["html"]["max_articles"] = max(1, min(args.max_articles, 100))
     source["html"]["max_pages"] = max(1, min(args.max_pages, 5))
 
     settings = {"crawler": {"request_timeout": 25}}
