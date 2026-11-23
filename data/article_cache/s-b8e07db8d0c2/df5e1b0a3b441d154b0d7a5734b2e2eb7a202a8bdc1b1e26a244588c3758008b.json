@@ -1,0 +1,14 @@
+{
+  "url": "https://tinhte.vn/thread/driver-621-35-van-chua-fix-triet-de-loi-hao-ssd-doi-voi-card-nvidia.4194955",
+  "canonical_url": "https://tinhte.vn/thread/driver-621-35-van-chua-fix-triet-de-loi-hao-ssd-doi-voi-card-nvidia.4194955",
+  "title": "Driver 621.35 vẫn chưa fix triệt để lỗi hao SSD đối với card NVIDIA | Viết bởi Pnghuy",
+  "author": "Tinh tế; Pnghuy",
+  "published_at": "2026-11-23",
+  "body": "sukvat. thời buổi SSD + RAM đắt như vàng mà thằng Huân Khựa này lại bào SSD thế này thì oẳn thật\n\nDriver 621.35 vẫn chưa fix triệt để lỗi hao SSD đối với card NVIDIA\n\nBản cập nhật driver GeForce Hotfix phiên bản 621.35 vừa được NVIDIA phát hành nhằm khắc phục tình trạng ghi dữ liệu quá mức lên ổ cứng SSD. Tuy nhiên, một thử nghiệm thực tế mới đây cho thấy lỗi này vẫn tiếp diễn sau thời gian dài máy tính hoạt động liên tục.\n\nLỗi này chỉ bộc lộ khi máy tính bước vào trạng thái nhàn rỗi và tắt màn hình chờ qua đêm trong 9 tiếng. Suốt khoảng thời gian đó, tiến trình chạy ngầm của NVIDIA phát sinh tới 40,85GB dữ liệu ghi I/O ở tốc độ trung bình 1,26MB/s. Ổ cứng NVMe chính trên máy phải gánh thêm 36GB tổng dữ liệu ghi thực tế dù không có tác vụ nào chạy. Vòng lặp ghi dữ liệu ngầm dường như tự kích hoạt trở lại khi thời gian bật máy kéo dài.\n\nDù chưa xử lý dứt điểm sự cố, bản Hotfix 621.35 vẫn ghi nhận mức cải thiện rõ rệt so với hai phiên bản trước đó là 621.24 và 621.14. Trước đây, bản driver 621.24 từng tích lũy tới 1,18TB dữ liệu ghi I/O chỉ sau 5 ngày sử dụng. Thậm chí tốc độ ghi có thời điểm chạm mức 9,15MB/s khi người dùng chỉ lướt web thông thường.\n\n8\n\nAnh em đang dùng card NVIDIA thì tốt nhất về lại bản 621.01 để chờ thông tin tiếp theo.\n\nmới về lại bản 01, mịa thấy rõ ràng nó nhảy disk lên 13.5mb/s ngay trc mắt mình luôn,\n\nBài này mà công ty trung quốc thì…\n\n- Chịu trách nhiệm nội dung: Trần Mạnh Hiệp\n\n- © 2026 Công ty Cổ phần MXH Tinh Tế\n\n- Địa chỉ: 351/56 Lê Văn Sỹ, P. Nhiêu Lộc, Tp HCM\n\n- Số điện thoại: 02822460095\n\n- MST: 0313255119\n\n- Giấy phép cung cấp dịch vụ MXH số 41/GP-BVHTTDL, Ký ngày: 25/03/2026",
+  "image": "https://photo2.tinhte.vn/data/attachment-files/2026/11/9141089_cover-nvidia-geforce-hotfix-621.35.jpg",
+  "id": "9ec15e9018c973677583a4e049c7ae1b",
+  "source_id": "s-b8e07db8d0c2",
+  "discovered_at": "2026-11-23T23:00:52.525231+00:00",
+  "fetched_at": "2026-11-23T23:03:16.958826Z",
+  "expires_at": "2026-11-28T23:03:16.958826Z"
+}
