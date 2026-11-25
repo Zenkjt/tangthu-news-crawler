@@ -46,6 +46,7 @@ class EpubGenerator:
         title="YOUR NEWS",
         edition_time="07:00",
         article_ids: list[str] | set[str] | None = None,
+        source_edition_modes: dict[str, str] | None = None,
     ):
         pool = Path(article_pool)
         output = Path(output_path)
@@ -152,7 +153,12 @@ class EpubGenerator:
                 lang="vi",
             )
             image_item = None
-            if article.get("image"):
+            source_mode = (
+                source_edition_modes.get(article.get("source_id"), "images")
+                if source_edition_modes is not None
+                else "images"
+            )
+            if source_mode == "images" and article.get("image"):
                 image_item = self._download_image(
                     article["image"],
                     article.get("url") or article.get("canonical_url"),

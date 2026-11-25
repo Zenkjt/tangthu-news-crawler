@@ -311,12 +311,15 @@ def _select_branch_articles(
     cache: ArticleCache,
     source_map: dict[str, dict],
 ) -> tuple[list[dict], list[dict]]:
-    mode = (
-        "images"
-        if any(s.get("edition_mode") == "images" for s in subscriptions)
-        else "text"
-    )
-    cap = 100 if mode == "images" else 200
+    source_modes: dict[str, str] = {}
+    for sub in subscriptions:
+        source_id = sub["source_id"]
+        requested_mode = "images" if sub.get("edition_mode") == "images" else "text"
+        if source_modes.get(source_id) != "images":
+            source_modes[source_id] = requested_mode
+
+    branch_mode = "images" if "images" in source_modes.values() else "text"
+    cap = 100 if branch_mode == "images" else 200
     selected: list[dict] = []
     edition_sources: list[dict] = []
     seen: set[tuple[str, str]] = set()
@@ -348,7 +351,7 @@ def _select_branch_articles(
         need = int(sub.get("article_count", 5))
         cached = cache.valid_articles(
             source_id,
-            edition_mode=mode,
+            edition_mode=source_modes.get(source_id, "text"),
         )
 
         cached.sort(
@@ -385,7 +388,7 @@ def _select_branch_articles(
             selected = selected[:cap]
             break
 
-    return selected, edition_sources
+    return selected, edition_sources, source_modes
 
 
 def _write_edition(
@@ -404,7 +407,7 @@ def _write_edition(
         )
         return None
 
-    selected, edition_sources = _select_branch_articles(
+    selected, edition_sources, source_modes = _select_branch_articles(
         branch_id,
         subscriptions,
         cache,
@@ -458,6 +461,7 @@ def _write_edition(
         title=settings.get("edition", {}).get("title", "YOUR NEWS"),
         edition_time=settings.get("edition", {}).get("time", "07:00"),
         article_ids=selected_ids,
+        source_edition_modes=source_modes,
     )
 
     validate_epub(epub_path)

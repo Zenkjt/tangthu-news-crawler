@@ -159,3 +159,60 @@ def test_native_toc_uses_crosspoint_hierarchy(tmp_path: Path):
         p.find("ncx:content", ns).attrib["src"] != "toc.xhtml"
         for p in top_level
     )
+
+
+def test_text_edition_omits_article_images(tmp_path: Path, monkeypatch):
+    pool = tmp_path / "pool"
+    _write_article(pool, "one", image="https://example.com/image.jpg")
+
+    def unexpected_download(*args, **kwargs):
+        raise AssertionError("text edition must not download article images")
+
+    monkeypatch.setattr(EpubGenerator, "_download_image", unexpected_download)
+
+    output = tmp_path / "text.epub"
+    EpubGenerator().generate(
+        pool,
+        output,
+        sources=[{
+            "id": "fixture",
+            "name": "Fixture News",
+            "status": "active",
+            "policy": {"mode": "full_article"},
+        }],
+        article_ids={"one"},
+        source_edition_modes={"fixture": "text"},
+    )
+
+    with zipfile.ZipFile(output) as archive:
+        chapter = archive.read("EPUB/article-1.xhtml").decode("utf-8")
+        assert "<img " not in chapter
+        assert not any(name.startswith("EPUB/images/article-") for name in archive.namelist())
+
+
+def test_images_edition_keeps_article_image_download_enabled(tmp_path: Path, monkeypatch):
+    pool = tmp_path / "pool"
+    _write_article(pool, "one", image="https://example.com/image.jpg")
+    calls = []
+
+    def record_download(url, referer, image_root, index):
+        calls.append((url, index))
+        return None
+
+    monkeypatch.setattr(EpubGenerator, "_download_image", record_download)
+
+    output = tmp_path / "images.epub"
+    EpubGenerator().generate(
+        pool,
+        output,
+        sources=[{
+            "id": "fixture",
+            "name": "Fixture News",
+            "status": "active",
+            "policy": {"mode": "full_article"},
+        }],
+        article_ids={"one"},
+        source_edition_modes={"fixture": "images"},
+    )
+
+    assert calls == [("https://example.com/image.jpg", 1)]
