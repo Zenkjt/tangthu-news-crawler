@@ -195,7 +195,7 @@ def test_images_edition_keeps_article_image_download_enabled(tmp_path: Path, mon
     _write_article(pool, "one", image="https://example.com/image.jpg")
     calls = []
 
-    def record_download(url, referer, image_root, index):
+    def record_download(self, url, referer, image_root, index):
         calls.append((url, index))
         return None
 
