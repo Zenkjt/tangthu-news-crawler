@@ -51,15 +51,16 @@ jobs:
           TANGTHU_UPLOAD_TOKEN: ${{ secrets.TANGTHU_UPLOAD_TOKEN }}
           TANGTHU_NEWS_DRIVE_FOLDER_ID: ${{ vars.TANGTHU_NEWS_DRIVE_FOLDER_ID }}
           TANGTHU_UPLOAD_ENABLED: ${{ vars.TANGTHU_UPLOAD_ENABLED || 'false' }}
-      - name: Persist ArticleCache
+      - name: Persist crawler state
         if: success()
         run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add config/source_markers.json
           if [ -d data/article_cache ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
             git add data/article_cache
-            if ! git diff --cached --quiet; then
-              git commit -m "news: update ArticleCache"
-              git push origin HEAD:main
-            fi
+          fi
+          if ! git diff --cached --quiet; then
+            git commit -m "news: persist crawler state"
+            git push origin HEAD:main
           fi
