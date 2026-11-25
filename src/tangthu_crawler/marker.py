@@ -10,7 +10,7 @@ from .config import ROOT
 
 
 MARKER_SCHEMA_VERSION = 1
-VALID_STATUSES = {"pending", "analyzing", "verified", "degraded", "failed"}
+VALID_STATUSES = {"pending", "analyzing", "fixed", "verified", "degraded", "failed"}
 VALID_ADAPTERS = {"generic_html", "vnexpress"}
 
 
@@ -85,7 +85,7 @@ class SourceMarkerRegistry:
             },
             "analysis": {
                 "last_analyzed_at": None,
-                "note": "Initial marker from the existing crawler profile; awaiting Analyzer verification.",
+                "note": "New source; awaiting Analyzer testing.",
             },
             "marker_version": 1,
             "created_at": now,
@@ -101,11 +101,16 @@ class SourceMarkerRegistry:
         status: str | None = None,
         quality: dict | None = None,
         analysis: dict | None = None,
+        force: bool = False,
     ) -> dict:
-        """Update one marker after Analyzer verification."""
+        """Update one marker; fixed markers require an explicit force override."""
         for marker in self.data["markers"]:
             if marker.get("source_id") != source_id:
                 continue
+            if marker.get("status") == "fixed" and not force:
+                raise ValueError(
+                    f"Marker {source_id} is fixed; pass force=True to override it"
+                )
             if adapter_id is not None:
                 if adapter_id not in VALID_ADAPTERS:
                     raise ValueError(f"Unsupported adapter_id: {adapter_id}")

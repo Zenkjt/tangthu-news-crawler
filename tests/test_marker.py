@@ -89,3 +89,19 @@ def test_marker_update_records_analyzer_decision(tmp_path):
     assert marker["status"] == "verified"
     assert marker["quality"]["score"] == 92
     assert marker["analysis"]["note"] == "passed"
+
+
+def test_fixed_marker_requires_explicit_override(tmp_path):
+    registry = SourceMarkerRegistry(tmp_path / "source_markers.json")
+    registry.ensure_sources([{"id": "s1", "url": "https://example.com"}])
+    registry.update("s1", status="fixed", analysis={"note": "Manually pinned"})
+
+    try:
+        registry.update("s1", status="verified")
+    except ValueError as exc:
+        assert "force=True" in str(exc)
+    else:
+        raise AssertionError("Expected fixed marker to reject implicit update")
+
+    marker = registry.update("s1", status="verified", force=True)
+    assert marker["status"] == "verified"
