@@ -5,43 +5,16 @@
       "source_id": "s-d18f41563365",
       "source_url": "https://vnexpress.net/",
       "domain": "vnexpress.net",
-      "adapter_id": "vnexpress",
+      "adapter_id": "generic_html",
       "adapter_version": "1",
       "profile": {
         "discovery": [
           "html"
         ],
         "html": {
-          "strategy": "page_articles",
+          "strategy": "generic",
           "max_articles": 20,
-          "max_pages": 4,
-          "article_container_selectors": [
-            "#paging, #list-news, .list-article"
-          ],
-          "article_link_selectors": [
-            "article.item-news h3.title-news a, article.item-news h2.title-news a",
-            "article.article-item h2.title-news a"
-          ],
-          "next_page_selectors": [
-            "a[rel~=\"next\"]",
-            ".pagination a.next",
-            "a.btn-next"
-          ],
-          "excluded_path_prefixes": [
-            "/tag/",
-            "/topic/",
-            "/search/",
-            "/tim-kiem/",
-            "/category/",
-            "/photo/",
-            "/podcast/",
-            "/live/",
-            "/infographics/",
-            "/video/",
-            "/chu-de/",
-            "/tac-gia/",
-            "/author/"
-          ]
+          "min_link_score": 4
         },
         "extractor": {
           "engine": "vnexpress"
