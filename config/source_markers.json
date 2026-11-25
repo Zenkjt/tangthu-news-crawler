@@ -1,0 +1,582 @@
+{
+  "schema_version": 1,
+  "markers": [
+    {
+      "source_id": "s-d18f41563365",
+      "source_url": "https://vnexpress.net/",
+      "domain": "vnexpress.net",
+      "adapter_id": "vnexpress",
+      "adapter_version": "1",
+      "profile": {
+        "discovery": [
+          "html"
+        ],
+        "html": {
+          "strategy": "page_articles",
+          "max_articles": 20,
+          "max_pages": 4,
+          "article_container_selectors": [
+            "#paging, #list-news, .list-article"
+          ],
+          "article_link_selectors": [
+            "article.item-news h3.title-news a, article.item-news h2.title-news a",
+            "article.article-item h2.title-news a"
+          ],
+          "next_page_selectors": [
+            "a[rel~=\"next\"]",
+            ".pagination a.next",
+            "a.btn-next"
+          ],
+          "excluded_path_prefixes": [
+            "/tag/",
+            "/topic/",
+            "/search/",
+            "/tim-kiem/",
+            "/category/",
+            "/photo/",
+            "/podcast/",
+            "/live/",
+            "/infographics/",
+            "/video/",
+            "/chu-de/",
+            "/tac-gia/",
+            "/author/"
+          ]
+        },
+        "extractor": {
+          "engine": "vnexpress"
+        },
+        "quality_gate": {
+          "enabled": true,
+          "require_title": true,
+          "min_body_chars": 300,
+          "min_paragraphs": 2,
+          "reject_titles": [
+            "Untitled",
+            "Article"
+          ]
+        },
+        "http": {
+          "headers": {
+            "Referer": "https://vnexpress.net/"
+          }
+        }
+      },
+      "status": "pending",
+      "quality": {
+        "score": null,
+        "sample_size": 0,
+        "passed": null
+      },
+      "analysis": {
+        "last_analyzed_at": null,
+        "note": "Initial marker from the existing crawler profile; awaiting Analyzer verification."
+      },
+      "marker_version": 1,
+      "created_at": "2026-11-25T12:40:03.376827Z",
+      "updated_at": "2026-11-25T12:40:03.376827Z"
+    },
+    {
+      "source_id": "s-dc670b803afb",
+      "source_url": "https://vnexpress.net/chu-de/thanh-pho-ha-noi-2056",
+      "domain": "vnexpress.net",
+      "adapter_id": "vnexpress",
+      "adapter_version": "1",
+      "profile": {
+        "discovery": [
+          "html"
+        ],
+        "html": {
+          "strategy": "page_articles",
+          "max_articles": 20,
+          "max_pages": 4,
+          "article_container_selectors": [
+            "#paging, #list-news, .list-article"
+          ],
+          "article_link_selectors": [
+            "article.item-news h3.title-news a, article.item-news h2.title-news a",
+            "article.article-item h2.title-news a"
+          ],
+          "next_page_selectors": [
+            "a[rel~=\"next\"]",
+            ".pagination a.next",
+            "a.btn-next"
+          ],
+          "excluded_path_prefixes": [
+            "/tag/",
+            "/topic/",
+            "/search/",
+            "/tim-kiem/",
+            "/category/",
+            "/photo/",
+            "/podcast/",
+            "/live/",
+            "/infographics/",
+            "/video/",
+            "/chu-de/",
+            "/tac-gia/",
+            "/author/"
+          ]
+        },
+        "extractor": {
+          "engine": "vnexpress"
+        },
+        "quality_gate": {
+          "enabled": true,
+          "require_title": true,
+          "min_body_chars": 300,
+          "min_paragraphs": 2,
+          "reject_titles": [
+            "Untitled",
+            "Article"
+          ]
+        },
+        "http": {
+          "headers": {
+            "Referer": "https://vnexpress.net/"
+          }
+        }
+      },
+      "status": "pending",
+      "quality": {
+        "score": null,
+        "sample_size": 0,
+        "passed": null
+      },
+      "analysis": {
+        "last_analyzed_at": null,
+        "note": "Initial marker from the existing crawler profile; awaiting Analyzer verification."
+      },
+      "marker_version": 1,
+      "created_at": "2026-11-25T12:40:03.376827Z",
+      "updated_at": "2026-11-25T12:40:03.376827Z"
+    },
+    {
+      "source_id": "s-9be786efe3f7",
+      "source_url": "https://vanhoanghethuat.vn/van-hoa",
+      "domain": "vanhoanghethuat.vn",
+      "adapter_id": "generic_html",
+      "adapter_version": "1",
+      "profile": {
+        "discovery": [
+          "html"
+        ],
+        "html": {
+          "strategy": "generic",
+          "max_articles": 20,
+          "min_link_score": 4
+        },
+        "extractor": {
+          "engine": "newspaper4k"
+        },
+        "quality_gate": {
+          "enabled": true,
+          "require_title": true,
+          "min_body_chars": 300,
+          "min_paragraphs": 2,
+          "reject_titles": [
+            "Untitled",
+            "Article"
+          ]
+        },
+        "http": {}
+      },
+      "status": "pending",
+      "quality": {
+        "score": null,
+        "sample_size": 0,
+        "passed": null
+      },
+      "analysis": {
+        "last_analyzed_at": null,
+        "note": "Initial marker from the existing crawler profile; awaiting Analyzer verification."
+      },
+      "marker_version": 1,
+      "created_at": "2026-11-25T12:40:03.376827Z",
+      "updated_at": "2026-11-25T12:40:03.376827Z"
+    },
+    {
+      "source_id": "s-b1540afe5a40",
+      "source_url": "https://vanhoanghethuat.vn/nghe-thuat",
+      "domain": "vanhoanghethuat.vn",
+      "adapter_id": "generic_html",
+      "adapter_version": "1",
+      "profile": {
+        "discovery": [
+          "html"
+        ],
+        "html": {
+          "strategy": "generic",
+          "max_articles": 20,
+          "min_link_score": 4
+        },
+        "extractor": {
+          "engine": "newspaper4k"
+        },
+        "quality_gate": {
+          "enabled": true,
+          "require_title": true,
+          "min_body_chars": 300,
+          "min_paragraphs": 2,
+          "reject_titles": [
+            "Untitled",
+            "Article"
+          ]
+        },
+        "http": {}
+      },
+      "status": "pending",
+      "quality": {
+        "score": null,
+        "sample_size": 0,
+        "passed": null
+      },
+      "analysis": {
+        "last_analyzed_at": null,
+        "note": "Initial marker from the existing crawler profile; awaiting Analyzer verification."
+      },
+      "marker_version": 1,
+      "created_at": "2026-11-25T12:40:03.376827Z",
+      "updated_at": "2026-11-25T12:40:03.376827Z"
+    },
+    {
+      "source_id": "s-be033261cd1d",
+      "source_url": "https://baomoi.com/the-gioi.epi",
+      "domain": "baomoi.com",
+      "adapter_id": "generic_html",
+      "adapter_version": "1",
+      "profile": {
+        "discovery": [
+          "html"
+        ],
+        "html": {
+          "strategy": "generic",
+          "max_articles": 20,
+          "min_link_score": 4
+        },
+        "extractor": {
+          "engine": "newspaper4k"
+        },
+        "quality_gate": {
+          "enabled": true,
+          "require_title": true,
+          "min_body_chars": 300,
+          "min_paragraphs": 2,
+          "reject_titles": [
+            "Untitled",
+            "Article"
+          ]
+        },
+        "http": {}
+      },
+      "status": "pending",
+      "quality": {
+        "score": null,
+        "sample_size": 0,
+        "passed": null
+      },
+      "analysis": {
+        "last_analyzed_at": null,
+        "note": "Initial marker from the existing crawler profile; awaiting Analyzer verification."
+      },
+      "marker_version": 1,
+      "created_at": "2026-11-25T12:40:03.376827Z",
+      "updated_at": "2026-11-25T12:40:03.376827Z"
+    },
+    {
+      "source_id": "s-abf1949433a3",
+      "source_url": "https://time.com/",
+      "domain": "time.com",
+      "adapter_id": "generic_html",
+      "adapter_version": "1",
+      "profile": {
+        "discovery": [
+          "html"
+        ],
+        "html": {
+          "strategy": "generic",
+          "max_articles": 20,
+          "min_link_score": 4
+        },
+        "extractor": {
+          "engine": "newspaper4k"
+        },
+        "quality_gate": {
+          "enabled": true,
+          "require_title": true,
+          "min_body_chars": 300,
+          "min_paragraphs": 2,
+          "reject_titles": [
+            "Untitled",
+            "Article"
+          ]
+        },
+        "http": {}
+      },
+      "status": "pending",
+      "quality": {
+        "score": null,
+        "sample_size": 0,
+        "passed": null
+      },
+      "analysis": {
+        "last_analyzed_at": null,
+        "note": "Initial marker from the existing crawler profile; awaiting Analyzer verification."
+      },
+      "marker_version": 1,
+      "created_at": "2026-11-25T12:40:03.376827Z",
+      "updated_at": "2026-11-25T12:40:03.376827Z"
+    },
+    {
+      "source_id": "s-c856fab26972",
+      "source_url": "https://vanhoanghethuat.vn/du-lich",
+      "domain": "vanhoanghethuat.vn",
+      "adapter_id": "generic_html",
+      "adapter_version": "1",
+      "profile": {
+        "discovery": [
+          "html"
+        ],
+        "html": {
+          "strategy": "generic",
+          "max_articles": 20,
+          "min_link_score": 4
+        },
+        "extractor": {
+          "engine": "newspaper4k"
+        },
+        "quality_gate": {
+          "enabled": true,
+          "require_title": true,
+          "min_body_chars": 300,
+          "min_paragraphs": 2,
+          "reject_titles": [
+            "Untitled",
+            "Article"
+          ]
+        },
+        "http": {}
+      },
+      "status": "pending",
+      "quality": {
+        "score": null,
+        "sample_size": 0,
+        "passed": null
+      },
+      "analysis": {
+        "last_analyzed_at": null,
+        "note": "Initial marker from the existing crawler profile; awaiting Analyzer verification."
+      },
+      "marker_version": 1,
+      "created_at": "2026-11-25T12:40:03.376827Z",
+      "updated_at": "2026-11-25T12:40:03.376827Z"
+    },
+    {
+      "source_id": "s-6ccd3104e718",
+      "source_url": "https://znews.vn/sach-hay.html",
+      "domain": "znews.vn",
+      "adapter_id": "generic_html",
+      "adapter_version": "1",
+      "profile": {
+        "discovery": [
+          "html"
+        ],
+        "html": {
+          "strategy": "generic",
+          "max_articles": 20,
+          "min_link_score": 4
+        },
+        "extractor": {
+          "engine": "newspaper4k"
+        },
+        "quality_gate": {
+          "enabled": true,
+          "require_title": true,
+          "min_body_chars": 300,
+          "min_paragraphs": 2,
+          "reject_titles": [
+            "Untitled",
+            "Article"
+          ]
+        },
+        "http": {}
+      },
+      "status": "pending",
+      "quality": {
+        "score": null,
+        "sample_size": 0,
+        "passed": null
+      },
+      "analysis": {
+        "last_analyzed_at": null,
+        "note": "Initial marker from the existing crawler profile; awaiting Analyzer verification."
+      },
+      "marker_version": 1,
+      "created_at": "2026-11-25T12:40:03.376827Z",
+      "updated_at": "2026-11-25T12:40:03.376827Z"
+    },
+    {
+      "source_id": "s-9bc4d0fa3068",
+      "source_url": "https://redsvn.net/category/nghe-thuat",
+      "domain": "redsvn.net",
+      "adapter_id": "generic_html",
+      "adapter_version": "1",
+      "profile": {
+        "discovery": [
+          "html"
+        ],
+        "html": {
+          "strategy": "generic",
+          "max_articles": 20,
+          "min_link_score": 4
+        },
+        "extractor": {
+          "engine": "newspaper4k"
+        },
+        "quality_gate": {
+          "enabled": true,
+          "require_title": true,
+          "min_body_chars": 300,
+          "min_paragraphs": 2,
+          "reject_titles": [
+            "Untitled",
+            "Article"
+          ]
+        },
+        "http": {}
+      },
+      "status": "pending",
+      "quality": {
+        "score": null,
+        "sample_size": 0,
+        "passed": null
+      },
+      "analysis": {
+        "last_analyzed_at": null,
+        "note": "Initial marker from the existing crawler profile; awaiting Analyzer verification."
+      },
+      "marker_version": 1,
+      "created_at": "2026-11-25T12:40:03.376827Z",
+      "updated_at": "2026-11-25T12:40:03.376827Z"
+    },
+    {
+      "source_id": "s-b8e07db8d0c2",
+      "source_url": "https://tinhte.vn/",
+      "domain": "tinhte.vn",
+      "adapter_id": "generic_html",
+      "adapter_version": "1",
+      "profile": {
+        "discovery": [
+          "html"
+        ],
+        "html": {
+          "strategy": "generic",
+          "max_articles": 20,
+          "min_link_score": 4
+        },
+        "extractor": {
+          "engine": "newspaper4k"
+        },
+        "quality_gate": {
+          "enabled": true,
+          "require_title": true,
+          "min_body_chars": 300,
+          "min_paragraphs": 2,
+          "reject_titles": [
+            "Untitled",
+            "Article"
+          ]
+        },
+        "http": {}
+      },
+      "status": "pending",
+      "quality": {
+        "score": null,
+        "sample_size": 0,
+        "passed": null
+      },
+      "analysis": {
+        "last_analyzed_at": null,
+        "note": "Initial marker from the existing crawler profile; awaiting Analyzer verification."
+      },
+      "marker_version": 1,
+      "created_at": "2026-11-25T12:40:03.376827Z",
+      "updated_at": "2026-11-25T12:40:03.376827Z"
+    },
+    {
+      "source_id": "s-e1cb35c2bd57",
+      "source_url": "https://vnexpress.net/goc-nhin",
+      "domain": "vnexpress.net",
+      "adapter_id": "vnexpress",
+      "adapter_version": "1",
+      "profile": {
+        "discovery": [
+          "html"
+        ],
+        "html": {
+          "strategy": "page_articles",
+          "max_articles": 20,
+          "max_pages": 4,
+          "article_container_selectors": [
+            "#paging, #list-news, .list-article"
+          ],
+          "article_link_selectors": [
+            "article.item-news h3.title-news a, article.item-news h2.title-news a",
+            "article.article-item h2.title-news a"
+          ],
+          "next_page_selectors": [
+            "a[rel~=\"next\"]",
+            ".pagination a.next",
+            "a.btn-next"
+          ],
+          "excluded_path_prefixes": [
+            "/tag/",
+            "/topic/",
+            "/search/",
+            "/tim-kiem/",
+            "/category/",
+            "/photo/",
+            "/podcast/",
+            "/live/",
+            "/infographics/",
+            "/video/",
+            "/chu-de/",
+            "/tac-gia/",
+            "/author/"
+          ]
+        },
+        "extractor": {
+          "engine": "vnexpress"
+        },
+        "quality_gate": {
+          "enabled": true,
+          "require_title": true,
+          "min_body_chars": 300,
+          "min_paragraphs": 2,
+          "reject_titles": [
+            "Untitled",
+            "Article"
+          ]
+        },
+        "http": {
+          "headers": {
+            "Referer": "https://vnexpress.net/"
+          }
+        }
+      },
+      "status": "pending",
+      "quality": {
+        "score": null,
+        "sample_size": 0,
+        "passed": null
+      },
+      "analysis": {
+        "last_analyzed_at": null,
+        "note": "Initial marker from the existing crawler profile; awaiting Analyzer verification."
+      },
+      "marker_version": 1,
+      "created_at": "2026-11-25T12:40:03.376827Z",
+      "updated_at": "2026-11-25T12:40:03.376827Z"
+    }
+  ]
+}
