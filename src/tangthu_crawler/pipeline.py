@@ -20,6 +20,7 @@ from .epub import EpubGenerator
 from .extractor import ArticleExtractor
 from .models import ArticleRef
 from .registry import SourceRegistry
+from .marker import SourceMarkerRegistry
 from .validator import validate_epub
 from .drive_upload import upload_epub
 
@@ -547,7 +548,22 @@ def run(mode: str | None = None, branch_id: str | None = None) -> None:
         payload["sources"],
         SourceRegistry().list_sources(),
     )
+    
+    # Create one persistent Marker per source URL; never key by domain.
+    marker_registry = SourceMarkerRegistry()
+    added_markers = marker_registry.ensure_sources(resolved_sources)
+    marker_registry.save()
 
+    if added_markers:
+        print(f"Source Marker: initialized {added_markers} new source(s)")
+
+    for source in resolved_sources:
+        marker_registry.apply(source)
+        marker = source["_marker"]
+        print(
+            f"{source['id']}: marker=v{marker['marker_version']} "
+            f"adapter={marker['adapter_id']} status={marker['status']}"
+        )
     selected_subscriptions = (
         all_active if mode == "daily" else subscriptions
     )
