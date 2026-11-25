@@ -2,7 +2,7 @@ id: vnexpress
 name: VnExpress
 url: https://vnexpress.net
 status: active
-site_adapter: vnexpress
+site_adapter: generic
 
 http:
   headers:
@@ -12,36 +12,9 @@ discovery:
   - html
 
 html:
-  strategy: page_articles
+  strategy: generic
   max_articles: 20
-  max_pages: 4
-  # Listing containers observed across VnExpress topic templates:
-  # Góc nhìn: #paging; older Hà Nội DOM: #list-news;
-  # current Hà Nội Today DOM: .list-article.
-  article_container_selectors:
-    - "#paging, #list-news, .list-article"
-  article_link_selectors:
-    # Góc nhìn uses item-news; current Hà Nội Today uses article-item.
-    - "article.item-news h3.title-news a, article.item-news h2.title-news a"
-    - "article.article-item h2.title-news a"
-  next_page_selectors:
-    - 'a[rel~="next"]'
-    - ".pagination a.next"
-    - "a.btn-next"
-  excluded_path_prefixes:
-    - /tag/
-    - /topic/
-    - /search/
-    - /tim-kiem/
-    - /category/
-    - /photo/
-    - /podcast/
-    - /live/
-    - /infographics/
-    - /video/
-    - /chu-de/
-    - /tac-gia/
-    - /author/
+  min_link_score: 4
 
 extractor:
   engine: vnexpress
